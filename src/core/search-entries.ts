@@ -7,7 +7,8 @@ export const searchEntries = (
   if (!query?.trim()) return entries;
   const terms = query.toLowerCase().split(/\s+/);
   return entries.filter((e) => {
-    const hay = `${e.role} ${e.summary}`.toLowerCase();
+    const filePart = e.files?.join(" ") ?? "";
+    const hay = `${e.role} ${e.summary} ${filePart}`.toLowerCase();
     return terms.every((t) => hay.includes(t));
   });
 };

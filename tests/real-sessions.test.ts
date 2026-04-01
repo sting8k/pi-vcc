@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "bun:test";
-import { compile } from "../src/core/summarize";
+import { buildCompactReport } from "../src/core/report";
 import { prepareSessionSamples, readSourceStat, type SessionSample } from "./support/real-sessions";
 import { loadSessionMessages } from "./support/load-session";
 
@@ -14,13 +14,17 @@ describe("real session integration", () => {
     for (const sample of samples) {
       const before = await readSourceStat(sample);
       const loaded = loadSessionMessages(sample.copy);
-      const summary = compile({ messages: loaded.messages });
+      const report = buildCompactReport({ messages: loaded.messages });
       const after = await readSourceStat(sample);
 
       expect(loaded.messageCount).toBeGreaterThan(0);
       expect(loaded.skippedCount).toBeGreaterThanOrEqual(0);
-      expect(summary.length).toBeGreaterThan(0);
-      expect(summary).toContain("[");
+      expect(report.summary.length).toBeGreaterThan(0);
+      expect(report.summary).toContain("[");
+      expect(report.before.preview.length).toBeGreaterThan(0);
+      expect(report.after.summaryPreview.length).toBeGreaterThan(0);
+      expect(report.compression.charsBefore).toBeGreaterThan(0);
+      expect(report.recall.probes.length).toBeGreaterThan(0);
       expect(after).toEqual(before);
     }
   });

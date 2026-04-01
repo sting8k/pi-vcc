@@ -14,9 +14,10 @@ export const formatRecallOutput = (
     ? `Found ${entries.length} matches for "${query}":`
     : `Session history (${entries.length} entries):`;
 
-  const lines = entries.map(
-    (e) => `#${e.index} [${e.role}] ${e.summary}`,
-  );
+  const lines = entries.map((e) => {
+    const fileSuffix = e.files?.length ? ` files:[${e.files.join(", ")}]` : "";
+    return `#${e.index} [${e.role}]${fileSuffix} ${e.summary}`;
+  });
 
   return `${header}\n\n${lines.join("\n\n")}`;
 };
