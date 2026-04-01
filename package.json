@@ -1,0 +1,13 @@
+{
+  "name": "@anthropic/pi-vcc",
+  "version": "0.1.0",
+  "description": "Structured conversation compactor for pi - replaces default compact summary with an agent-optimized structured format.",
+  "main": "index.ts",
+  "keywords": ["pi-package"],
+  "dependencies": {
+    "@mariozechner/pi-coding-agent": "*"
+  },
+  "pi": {
+    "extensions": ["./index.ts"]
+  }
+}
