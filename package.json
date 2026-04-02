@@ -2,8 +2,24 @@
   "name": "@sting8k/pi-vcc",
   "version": "0.1.0",
   "description": "Structured conversation compactor for pi - replaces default compact summary with an agent-optimized structured format.",
+  "keywords": [
+    "pi-package"
+  ],
+  "homepage": "https://github.com/sting8k/pi-vcc#readme",
+  "bugs": {
+    "url": "https://github.com/sting8k/pi-vcc/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sting8k/pi-vcc.git"
+  },
+  "license": "ISC",
+  "author": "sting8k",
+  "type": "commonjs",
   "main": "index.ts",
-  "keywords": ["pi-package"],
+  "directories": {
+    "test": "tests"
+  },
   "scripts": {
     "test": "bun test",
     "bench": "bun run ./scripts/benchmark-real-sessions.ts"
@@ -11,7 +27,10 @@
   "dependencies": {
     "@mariozechner/pi-coding-agent": "*"
   },
+  "devDependencies": {},
   "pi": {
-    "extensions": ["./index.ts"]
+    "extensions": [
+      "./index.ts"
+    ]
   }
 }
