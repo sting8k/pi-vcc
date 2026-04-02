@@ -28,7 +28,7 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI) => {
     };
 
     return {
-      compaction: { summary, details },
+      compaction: { summary, details, tokensBefore: preparation.tokensBefore },
     };
   });
 };
