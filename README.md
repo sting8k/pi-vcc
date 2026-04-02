@@ -38,7 +38,7 @@ Inspired by [VCC](https://github.com/lllyasviel/VCC) (View-oriented Conversation
 ## Install
 
 ```bash
-pi install npm:pi-vcc
+pi install npm:@sting8k/pi-vcc
 ```
 
 Or from GitHub:
