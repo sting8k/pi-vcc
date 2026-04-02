@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { convertToLlm } from "@mariozechner/pi-coding-agent/dist/core/messages.js";
+import { convertToLlm } from "@mariozechner/pi-coding-agent";
 import { compile } from "../core/summarize";
 import type { PiVccCompactionDetails } from "../details";
 
