@@ -17,9 +17,10 @@ const loadAllMessages = (sessionFile: string, full: boolean) => {
       entries.push(JSON.parse(line));
     } catch {}
   }
-  return entries
-    .filter((e) => e.type === "message" && e.message)
-    .map((e, i) => renderMessage(e.message, i, full));
+  const messageEntries = entries.filter((e) => e.type === "message" && e.message);
+  const rendered = messageEntries.map((e, i) => renderMessage(e.message, i, full));
+  const rawMessages = messageEntries.map((e) => e.message);
+  return { rendered, rawMessages };
 };
 
 export const registerRecallTool = (pi: ExtensionAPI) => {
@@ -54,7 +55,7 @@ export const registerRecallTool = (pi: ExtensionAPI) => {
       const hasExpand = expandSet.size > 0;
 
       if (hasExpand && !params.query) {
-        const fullMsgs = loadAllMessages(sessionFile, true);
+        const { rendered: fullMsgs } = loadAllMessages(sessionFile, true);
         const expanded = fullMsgs.filter((m) => expandSet.has(m.index));
         if (expanded.length === 0) {
           return {
@@ -69,9 +70,9 @@ export const registerRecallTool = (pi: ExtensionAPI) => {
         };
       }
 
-      const msgs = loadAllMessages(sessionFile, false);
+      const { rendered: msgs, rawMessages } = loadAllMessages(sessionFile, false);
       const results = params.query?.trim()
-        ? searchEntries(msgs, params.query).slice(0, MAX_RESULTS)
+        ? searchEntries(msgs, rawMessages, params.query).slice(0, MAX_RESULTS)
         : msgs.slice(-DEFAULT_RECENT);
       const output = formatRecallOutput(results, params.query);
 

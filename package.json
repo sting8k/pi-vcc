@@ -1,6 +1,6 @@
 {
   "name": "@sting8k/pi-vcc",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Algorithmic conversation compactor for pi - transcript-preserving structured summaries, no LLM calls",
   "main": "index.ts",
   "keywords": [

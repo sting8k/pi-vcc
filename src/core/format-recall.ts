@@ -1,7 +1,7 @@
-import type { RenderedEntry } from "./render-entries";
+import type { SearchHit } from "./search-entries";
 
 export const formatRecallOutput = (
-  entries: RenderedEntry[],
+  entries: SearchHit[],
   query?: string,
 ): string => {
   if (entries.length === 0) {
@@ -16,7 +16,8 @@ export const formatRecallOutput = (
 
   const lines = entries.map((e) => {
     const fileSuffix = e.files?.length ? ` files:[${e.files.join(", ")}]` : "";
-    return `#${e.index} [${e.role}]${fileSuffix} ${e.summary}`;
+    const body = query && e.snippet ? e.snippet : e.summary;
+    return `#${e.index} [${e.role}]${fileSuffix} ${body}`;
   });
 
   return `${header}\n\n${lines.join("\n\n")}`;

@@ -19,3 +19,14 @@ export const textParts = (content: Message["content"]): string[] => {
 
 export const textOf = (content: Message["content"]): string =>
   textParts(content).join("\n");
+
+/** Extract a snippet of ~`radius` chars around the first match of `term` in `text`. */
+export const snippet = (text: string, term: string, radius = 60): string | null => {
+  const idx = text.toLowerCase().indexOf(term.toLowerCase());
+  if (idx === -1) return null;
+  const start = Math.max(0, idx - radius);
+  const end = Math.min(text.length, idx + term.length + radius);
+  const prefix = start > 0 ? "..." : "";
+  const suffix = end < text.length ? "..." : "";
+  return `${prefix}${text.slice(start, end)}${suffix}`;
+};
