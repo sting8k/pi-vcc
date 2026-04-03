@@ -11,7 +11,7 @@ export interface RenderedEntry {
 }
 
 const toolCalls = (content: Message["content"]): string => {
-  if (typeof content === "string") return "";
+  if (!content || typeof content === "string") return "";
   return content
     .filter((c) => c.type === "toolCall")
     .map((c) => `${c.name}(${summarizeToolArgs(c.arguments)})`)
@@ -19,7 +19,7 @@ const toolCalls = (content: Message["content"]): string => {
 };
 
 const extractFilesFromContent = (content: Message["content"]): string[] => {
-  if (typeof content === "string") return [];
+  if (!content || typeof content === "string") return [];
   return content
     .filter((c) => c.type === "toolCall")
     .map((c) => extractPath(c.arguments))
@@ -37,6 +37,13 @@ export const renderMessage = (msg: Message, index: number, full = false): Render
       index, role: "tool_result",
       summary: `${prefix}[${msg.toolName}] ${text}`,
     };
+  }
+  // bashExecution has command+output instead of content
+  if ((msg as any).role === "bashExecution") {
+    const cmd = (msg as any).command ?? "";
+    const out = (msg as any).output ?? "";
+    const text = full ? `$ ${cmd}\n${out}` : clip(`$ ${cmd}\n${out}`, 300);
+    return { index, role: "bash", summary: text };
   }
   const text = full ? textOf(msg.content) : clip(textOf(msg.content), 300);
   const tools = toolCalls(msg.content);

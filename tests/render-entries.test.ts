@@ -36,5 +36,27 @@ describe("renderMessage", () => {
     const r = renderMessage(userMsg(long), 0);
     expect(r.summary.length).toBeLessThanOrEqual(300);
   });
+
+  it("renders bashExecution message", () => {
+    const msg = { role: "bashExecution", command: "ls -la", output: "total 0\n" } as any;
+    const r = renderMessage(msg, 5);
+    expect(r.role).toBe("bash");
+    expect(r.summary).toContain("$ ls -la");
+    expect(r.summary).toContain("total 0");
+  });
+
+  it("renders bashExecution with missing output", () => {
+    const msg = { role: "bashExecution", command: "exit 1" } as any;
+    const r = renderMessage(msg, 6);
+    expect(r.role).toBe("bash");
+    expect(r.summary).toContain("$ exit 1");
+  });
+
+  it("handles message with undefined content", () => {
+    const msg = { role: "assistant", content: undefined } as any;
+    const r = renderMessage(msg, 3);
+    expect(r.role).toBe("assistant");
+    expect(r.summary).toBe("");
+  });
 });
 

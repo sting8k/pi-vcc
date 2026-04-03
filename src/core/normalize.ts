@@ -8,7 +8,7 @@ const normalizeOne = (msg: Message): NormalizedBlock[] => {
     const blocks: NormalizedBlock[] = [];
     const text = sanitize(textOf(msg.content));
     if (text) blocks.push({ kind: "user", text });
-    if (typeof msg.content !== "string") {
+    if (msg.content && typeof msg.content !== "string") {
       for (const part of msg.content) {
         if (part.type === "image") {
           blocks.push({ kind: "user", text: `[image: ${part.mimeType}]` });
@@ -28,6 +28,7 @@ const normalizeOne = (msg: Message): NormalizedBlock[] => {
   }
 
   if (msg.role === "assistant") {
+    if (!msg.content) return [];
     if (typeof msg.content === "string") {
       return [{ kind: "assistant", text: sanitize(msg.content) }];
     }

@@ -10,6 +10,7 @@ export const firstLine = (text: string, max = 200): string =>
   clip(text.split("\n")[0] ?? "", max);
 
 export const textParts = (content: Message["content"]): string[] => {
+  if (!content) return [];
   if (typeof content === "string") return [content];
   return content
     .filter((part) => part.type === "text")
