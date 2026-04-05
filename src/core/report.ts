@@ -7,9 +7,9 @@ import { searchEntries } from "./search-entries";
 import { type CompileInput, compile } from "./summarize";
 
 const headers = [
-  "Session Goal", "Current State", "What Was Done",
-  "Important Findings", "Files And Changes", "Open Problems",
-  "Decisions And Constraints", "User Preferences", "Next Best Steps",
+  "Session Goal", "Key Conversation Turns", "Actions Taken",
+  "Important Evidence", "Files And Changes", "Outstanding Context",
+  "User Preferences",
 ];
 
 interface RoleCounts {

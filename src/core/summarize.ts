@@ -45,12 +45,14 @@ const capMergedBullets = (header: string, bullets: string[]): string[] => {
   if (header === "User Preferences") return bullets.slice(-6);
   if (header === "Files And Changes") return bullets.slice(0, 12);
   if (header === "Actions Taken") {
-    if (bullets.length <= 8) return bullets;
-    const omitted = bullets.length - 5;
+    // Filter out old omitted markers before re-capping
+    const clean = bullets.filter((b) => !/^\s*-?\s*\+\d+\s+actions omitted/.test(b));
+    if (clean.length <= 8) return clean;
+    const omitted = clean.length - 5;
     return [
-      ...bullets.slice(0, 3),
+      ...clean.slice(0, 3),
       `- +${omitted} actions omitted`,
-      ...bullets.slice(-2),
+      ...clean.slice(-2),
     ];
   }
   return bullets;
