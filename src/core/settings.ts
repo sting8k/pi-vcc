@@ -7,6 +7,35 @@ const settingsPath = (): string => process.env.PI_VCC_CONFIG_PATH ?? SETTINGS_PA
 /** Backwards-compat export. Resolves at access time, not import time. */
 export const SETTINGS_PATH = settingsPath();
 
+/** Per-model or global compaction threshold. */
+export interface ModelThreshold {
+  /**
+   * Tokens to reserve for LLM response. Overrides pi-core's
+   * compaction.reserveTokens for matching models.
+   *
+   * A higher value compacts earlier (more conservative); a lower value
+   * lets context grow larger before compacting.
+   *
+   * Takes precedence over compactAtTokens and compactPercent when multiple are set.
+   */
+  reserveTokens?: number;
+  /**
+   * Absolute context token count where compaction triggers.
+   *
+   * Useful when you want the same trigger point across models with
+   * different context windows. Ignored when reserveTokens is also set;
+   * takes precedence over compactPercent.
+   */
+  compactAtTokens?: number;
+  /**
+   * Compaction trigger as a percentage of context window (1–99).
+   * Compaction fires when: contextTokens > contextWindow × compactPercent / 100
+   *
+   * Ignored when reserveTokens or compactAtTokens is also set.
+   */
+  compactPercent?: number;
+}
+
 export interface PiVccSettings {
   /**
    * When true (default), pi-vcc handles ALL compactions:
@@ -36,6 +65,22 @@ export interface PiVccSettings {
    * Overflow retry is still owned by pi-core via willRetry.
    */
   continueAfterThresholdCompact: boolean;
+  /**
+   * Per-model compaction thresholds. Keys are matched against
+   * "provider/modelId" (e.g., "anthropic/claude-3-5-sonnet") or
+   * just "modelId" (e.g., "claude-3-5-sonnet").
+   *
+   * When a model matches, its threshold overrides pi-core's global
+   * compaction settings for the *when to compact* decision. This lets
+   * different models compact at different context fill levels.
+   */
+  modelThresholds?: Record<string, ModelThreshold>;
+  /**
+   * Global threshold applied to all models not matched by modelThresholds.
+   * Uses reserveTokens, compactAtTokens, or compactPercent. If omitted,
+   * pi-core's global compaction settings apply (no override).
+   */
+  globalThreshold?: ModelThreshold;
   /** Write debug snapshot to /tmp/pi-vcc-debug.json on each compaction. */
   debug: boolean;
 }
@@ -59,6 +104,67 @@ export function loadSettings(): PiVccSettings {
   const parsed = readJson(settingsPath());
   if (!parsed || typeof parsed !== "object") return { ...DEFAULT_SETTINGS };
   return { ...DEFAULT_SETTINGS, ...(parsed as Partial<PiVccSettings>) };
+}
+
+/**
+ * Resolve the effective ModelThreshold for a given model.
+ *
+ * Lookup order:
+ *  1. Exact match on "provider/modelId" key
+ *  2. Exact match on "modelId" key
+ *  3. globalThreshold from settings
+ *  4. undefined (no override — pi-core's global settings apply)
+ */
+export function getModelThreshold(
+  settings: PiVccSettings,
+  model: { id: string; provider?: string } | undefined,
+): ModelThreshold | undefined {
+  if (!model) return settings.globalThreshold;
+
+  const providerModelId = model.provider ? `${model.provider}/${model.id}` : undefined;
+
+  // Exact match on provider/modelId
+  if (providerModelId && settings.modelThresholds?.[providerModelId]) {
+    return settings.modelThresholds[providerModelId];
+  }
+
+  // Exact match on just modelId
+  if (settings.modelThresholds?.[model.id]) {
+    return settings.modelThresholds[model.id];
+  }
+
+  return settings.globalThreshold;
+}
+
+/**
+ * Resolve the context token count where compaction should trigger.
+ *
+ * Precedence: reserveTokens > compactAtTokens > compactPercent.
+ * Returns undefined when the threshold cannot produce a usable trigger.
+ */
+export function resolveTriggerTokens(
+  threshold: ModelThreshold,
+  contextWindow: number,
+): number | undefined {
+  if (contextWindow <= 0) return undefined;
+
+  if (threshold.reserveTokens != null) {
+    return contextWindow - threshold.reserveTokens;
+  }
+
+  if (threshold.compactAtTokens != null) {
+    const tokens = threshold.compactAtTokens;
+    if (!Number.isFinite(tokens) || tokens < 1) return undefined;
+    return Math.round(tokens);
+  }
+
+  if (threshold.compactPercent != null) {
+    const pct = threshold.compactPercent;
+    if (pct < 1 || pct > 99) return undefined;
+    return Math.round(contextWindow * (1 - pct / 100));
+  }
+
+  return undefined;
 }
 
 /**
