@@ -85,7 +85,7 @@ export const formatRecallOutput = (
   }
 
   const header = headerOverride
-    ? `${headerOverride} for "${query}":`
+    ? `${headerOverride}${query ? ` for "${query}"` : ""}:`
     : query
       ? `Found ${entries.length} matches for "${query}":`
       : `Session history (${entries.length} entries):`;
