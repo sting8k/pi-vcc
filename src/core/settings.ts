@@ -29,10 +29,15 @@ export interface PiVccSettings {
    */
   smartKeepTail: boolean;
   /**
-   * When true (default), pi-vcc asks the agent to continue after a successful
+   * Permission (not a guarantee) for pi-vcc's own continue after a successful
    * automatic compaction (threshold, or overflow after the assistant already
-   * finished with stop). This avoids a UX cliff where the agent finishes a response,
+   * finished with stop). It avoids a UX cliff where the agent finishes a response,
    * immediately compacts, and then stops instead of continuing the task.
+   *
+   * false = never continue. true (default) = continue only on Pi versions that
+   * still need the fallback: Pi >= PI_SELF_RESUME_VERSION resumes the run itself,
+   * so pi-vcc stays silent there even when this is true (issue #22). A version
+   * that cannot be parsed is treated as new Pi, i.e. no continue.
    * Overflow retry is still owned by pi-core via willRetry.
    */
   continueAfterThresholdCompact: boolean;

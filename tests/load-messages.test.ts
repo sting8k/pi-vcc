@@ -27,6 +27,42 @@ describe("loadAllMessages", () => {
     }
   });
 
+  it("treats a not-yet-written session file as empty history instead of throwing ENOENT", () => {
+    // Fresh session: pi has not persisted any entry, so the JSONL does not exist.
+    const dir = mkdtempSync(join(tmpdir(), "pi-vcc-load-missing-"));
+    try {
+      const loaded = loadAllMessages(join(dir, "nope", "session.jsonl"), false);
+      expect(loaded.rendered).toEqual([]);
+      expect(loaded.rawMessages).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("returns empty history for an existing but empty session file", () => {
+    const dir = mkdtempSync(join(tmpdir(), "pi-vcc-load-empty-"));
+    const file = join(dir, "session.jsonl");
+    try {
+      writeFileSync(file, "", "utf8");
+      const loaded = loadAllMessages(file, false);
+      expect(loaded.rendered).toEqual([]);
+      expect(loaded.rawMessages).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("still surfaces read errors that are not 'file does not exist'", () => {
+    // A directory is readable-but-not-a-file (EISDIR): a real I/O problem, not
+    // an empty history. It must not be swallowed.
+    const dir = mkdtempSync(join(tmpdir(), "pi-vcc-load-eisdir-"));
+    try {
+      expect(() => loadAllMessages(dir, false)).toThrow();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("filters messages by allowed lineage entry IDs and preserves original message index", () => {
     const dir = mkdtempSync(join(tmpdir(), "pi-vcc-load-filter-"));
     const file = join(dir, "session.jsonl");

@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { convertToLlm } from "@earendil-works/pi-coding-agent";
+import { convertToLlm, VERSION } from "@earendil-works/pi-coding-agent";
 import { writeFileSync } from "fs";
 import { compileRanked } from "../core/summarize";
 import { parseKeepAndPrompt, PI_VCC_COMPACT_INSTRUCTION } from "../core/compact-args";
@@ -48,6 +48,45 @@ let pendingAutoContinueTimer: ReturnType<typeof setTimeout> | null = null;
 // Ported from monotykamary/pi-vcc branch 'tom'
 // (https://github.com/monotykamary/pi-vcc, MIT) — a pi-vcc derivative.
 export const AUTO_CONTINUE_CUSTOM_TYPE = "pi-vcc-auto-continue";
+
+/**
+ * First Pi version that resumes the run by itself after an automatic compaction.
+ * From this version on pi-vcc's fallback continue is redundant, and because it is
+ * scheduled blind (setTimeout(0), no idle check) it lands as a ghost turn once the
+ * self-resumed run ends - see issue #22, which reports both behaviours on 0.84.4.
+ * Kept as a [major, minor, patch] tuple so there is one source of truth.
+ */
+export const PI_SELF_RESUME_VERSION: readonly [number, number, number] = [0, 84, 4];
+
+/**
+ * Minimal semver core parse: [major, minor, patch], or null when unusable.
+ * Prerelease/build suffixes are dropped, so 0.84.4-rc.1 counts as 0.84.4 - the
+ * safe direction, since such a build already carries the self-resume behaviour.
+ */
+const parseVersionCore = (version: unknown): [number, number, number] | null => {
+  if (typeof version !== "string") return null;
+  const m = /^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(version.trim());
+  if (!m) return null;
+  return [Number(m[1]), Number(m[2]), Number(m[3])];
+};
+
+/**
+ * Two keys must both turn for pi-vcc to send its own continue:
+ *  - `settingEnabled` is the user's permission (`continueAfterThresholdCompact`);
+ *    false always wins.
+ *  - the running Pi must be old enough to still need the fallback.
+ * An unreadable/malformed version fails safe to "no continue": a missing continue
+ * costs one idle turn, a ghost turn corrupts the transcript.
+ */
+export const shouldScheduleAutoContinue = (settingEnabled: boolean, piVersion: unknown): boolean => {
+  if (!settingEnabled) return false;
+  const running = parseVersionCore(piVersion);
+  if (!running) return false;
+  for (let i = 0; i < 3; i++) {
+    if (running[i] !== PI_SELF_RESUME_VERSION[i]) return running[i] < PI_SELF_RESUME_VERSION[i];
+  }
+  return false;
+};
 
 export const triggerInvisibleContinue = (pi: ExtensionAPI): void => {
   pi.sendMessage(
@@ -477,7 +516,12 @@ const REASON_MESSAGES: Record<OwnCutCancelReason, string> = {
   too_few_live_messages: "pi-vcc: Too few messages to compact",
 };
 
-export const registerBeforeCompactHook = (pi: ExtensionAPI) => {
+/**
+ * `piVersion` is the running Pi version (defaults to the runtime's own VERSION).
+ * It is a parameter, not a setting: it decides whether pi-vcc's auto-continue
+ * fallback is still needed, and lets tests pin the behaviour to a version.
+ */
+export const registerBeforeCompactHook = (pi: ExtensionAPI, piVersion: string = VERSION) => {
   // Filter our invisible-continue marker out of the LLM context payload so the
   // model just continues from the compaction summary (matched by customType ONLY).
   pi.on("context", (event) => {
@@ -730,7 +774,8 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI) => {
     if (willRetry) return;
     const stats = lastStats;
     if (!stats) return;
-    const shouldContinueAfterAutoCompact = (reason === "threshold" || reason === "overflow") && loadSettings().continueAfterThresholdCompact;
+    const shouldContinueAfterAutoCompact = (reason === "threshold" || reason === "overflow")
+      && shouldScheduleAutoContinue(loadSettings().continueAfterThresholdCompact, piVersion);
     scheduleCompactionStatsNotify(ctx, stats);
     if (followUpPrompt) {
       try {

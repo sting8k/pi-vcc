@@ -2,6 +2,13 @@
 
 All notable changes to `@sting8k/pi-vcc` are documented in this file.
 
+## [0.7.1]
+
+### Fixes
+
+- **Compaction: prevent duplicate ghost turns on Pi 0.84.4+** - Pi core now resumes runs after automatic compaction, making pi-vcc's queued invisible follow-up redundant and allowing it to land as an unsolicited turn after the resumed run finishes. `continueAfterThresholdCompact` is now a compatibility permission: when enabled, pi-vcc sends its fallback only on Pi versions older than 0.84.4. Existing configs with `true` are protected automatically; malformed runtime versions fail safe by sending nothing. Explicit follow-up prompts and Pi-owned overflow retries are unchanged.
+- **Recall: handle brand-new sessions before their JSONL exists** - `/pi-vcc-recall` and shared recall paths now treat a missing current-session file as empty history instead of throwing `ENOENT`, returning the existing friendly no-history/no-match response. Other filesystem errors still surface, and recall remains scoped to the current session.
+
 ## [0.7.0]
 
 ### Features
