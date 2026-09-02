@@ -24,7 +24,7 @@ describe("real session integration", () => {
       expect(report.before.preview.length).toBeGreaterThan(0);
       expect(report.after.summaryPreview.length).toBeGreaterThan(0);
       expect(report.compression.charsBefore).toBeGreaterThan(0);
-      expect(report.recall.probes.length).toBeGreaterThan(0);
+      expect(report.recall.probes.every((probe) => probe.query.length > 0)).toBe(true);
       expect(after).toEqual(before);
     }
   });

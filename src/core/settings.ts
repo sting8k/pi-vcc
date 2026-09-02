@@ -3,6 +3,7 @@ import { homedir } from "os";
 import { dirname, join } from "path";
 
 export const SETTINGS_PATH_DEFAULT = join(homedir(), ".pi", "agent", "pi-vcc-config.json");
+export const DEFAULT_INTER_TURN_COMPACTION_TOKENS = 250_000;
 const settingsPath = (): string => process.env.PI_VCC_CONFIG_PATH ?? SETTINGS_PATH_DEFAULT;
 /** Backwards-compat export. Resolves at access time, not import time. */
 export const SETTINGS_PATH = settingsPath();
@@ -41,6 +42,11 @@ export interface PiVccSettings {
    * Overflow retry is still owned by pi-core via willRetry.
    */
   continueAfterThresholdCompact: boolean;
+  /**
+   * Compact between tool-loop provider requests once active context reaches this
+   * many tokens. Set to null to rely on Pi's end-of-run threshold check.
+   */
+  interTurnCompactionTokens: number | null;
   /** Write debug snapshot to /tmp/pi-vcc-debug.json on each compaction. */
   debug: boolean;
 }
@@ -49,6 +55,7 @@ export const DEFAULT_SETTINGS: PiVccSettings = {
   overrideDefaultCompaction: true,
   smartKeepTail: true,
   continueAfterThresholdCompact: true,
+  interTurnCompactionTokens: DEFAULT_INTER_TURN_COMPACTION_TOKENS,
   debug: false,
 };
 

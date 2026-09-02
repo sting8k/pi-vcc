@@ -2,6 +2,12 @@
 
 All notable changes to `@sting8k/pi-vcc` are documented in this file.
 
+## Unreleased
+
+### Fixes
+
+- **Compaction: guard long tool loops between provider requests** - Pi checks its automatic compaction threshold after the complete agent run. A model that keeps calling tools can therefore make many requests past the threshold before Pi gets control back. pi-vcc now checks active context before every provider request and starts compaction at 250,000 tokens by default. `interTurnCompactionTokens` changes the limit or disables the trigger with `null`. The interrupted tool loop resumes after compaction when `continueAfterThresholdCompact` is enabled.
+
 ## [0.7.1]
 
 ### Fixes

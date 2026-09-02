@@ -57,15 +57,15 @@ pi -e https://github.com/sting8k/pi-vcc
 
 ## Usage
 
-pi-vcc runs automatically when your context window fills up, or on-demand via commands.
+pi-vcc compacts between provider requests at 250,000 active-context tokens by default, before a long tool loop can exhaust its context window. It also handles Pi's end-of-run threshold and overflow compactions, and supports manual commands.
 
 ### Compaction
 
 - **`/pi-vcc`** — manual compaction, keeps the last 1 user turn by default.
 - **`/pi-vcc keep:N [prompt]`** — keep the last `N` user turns; optional prompt is sent to the agent after compaction.
   - `keep:1` = default, `keep:0` = compact everything, no tail.
-- By default pi-vcc also handles `/compact` and auto-threshold compactions. Set `overrideDefaultCompaction: false` to send those paths back to Pi core.
-- **Smart keep**: when enabled, pi-vcc auto-boosts `keep:1` to a larger N if the tail is small enough (< 5k tokens, capped at 20k).
+- By default pi-vcc also handles `/compact` and automatic threshold compactions. Set `overrideDefaultCompaction: false` to send those paths back to Pi core and disable pi-vcc's inter-turn trigger.
+- **Smart keep**: when enabled, pi-vcc auto-boosts `keep:1` to a larger N if the tail is small enough (< 5k tokens, capped at 25k).
 
 ### Compacted message structure
 
@@ -136,15 +136,16 @@ Manual slash command:
 
 ## Pipeline
 
-1. **Calibrate** — estimate `charsPerToken` from `preparation.tokensBefore` vs actual message chars (falls back to heuristic `4 chars/token`)
-2. **Smart keep** — if `keep:1` tail is small (< 5k tokens), boost keep to the largest N whose tail stays ≤ 20k tokens; explicit `keep:N` is always respected
-3. **Build cut** — split at the keep boundary; everything before is summarized, the tail stays intact
-4. **Normalize** — raw Pi messages → uniform blocks (user, assistant, tool_call, tool_result, thinking)
-5. **Filter noise** — strip system messages, empty blocks
-6. **Build sections** — extract goal, file paths, commits, outstanding context, preferences
-7. **Brief transcript** — chronological conversation flow, tool calls collapsed to one-liners, text truncated
-8. **Format** — render into bracketed sections + transcript
-9. **Merge** — if previous summary exists: sticky sections dedup, volatile sections replace, transcript rolls
+1. **Guard tool loops** — before each provider request, compact when active context reaches `interTurnCompactionTokens`
+2. **Calibrate** — estimate `charsPerToken` from `preparation.tokensBefore` vs actual message chars (falls back to heuristic `4 chars/token`)
+3. **Smart keep** — if the `keep:1` tail is small (< 5k tokens), boost keep to the largest N whose tail stays ≤ 25k tokens; explicit `keep:N` is always respected
+4. **Build cut** — split at the keep boundary; everything before is summarized, the tail stays intact
+5. **Normalize** — raw Pi messages → uniform blocks (user, assistant, tool_call, tool_result, thinking)
+6. **Filter noise** — strip system messages, empty blocks
+7. **Build sections** — extract goal, file paths, commits, outstanding context, preferences
+8. **Brief transcript** — chronological conversation flow, tool calls collapsed to one-liners, text truncated
+9. **Format** — render into bracketed sections + transcript
+10. **Merge** — if previous summary exists: sticky sections dedup, volatile sections replace, transcript rolls
 
 ## Config
 
@@ -155,13 +156,15 @@ Config lives at `~/.pi/agent/pi-vcc-config.json` (auto-scaffolded on first load 
   "overrideDefaultCompaction": true,
   "smartKeepTail": true,
   "continueAfterThresholdCompact": true,
+  "interTurnCompactionTokens": 250000,
   "debug": false
 }
 ```
 
 - **`overrideDefaultCompaction`** *(default `true`)*: when `true`, pi-vcc handles all compaction paths — `/pi-vcc`, `/compact`, and auto-threshold/overflow. Set `false` to restrict pi-vcc to `/pi-vcc` and let the rest fall through to pi core. Existing config files keep whatever value they already have.
-- **`smartKeepTail`** *(default `true`)*: when `true`, pi-vcc boosts the default `keep:1` to the largest `N` whose tail stays ≤ 20k tokens, but only when the `keep:1` tail is already small (≤ 5k tokens). Explicit `keep:N` from the user is always respected.
-- **`continueAfterThresholdCompact`** *(default `true`)*: permission for pi-vcc to ask the agent to continue after a successful automatic compaction (threshold or overflow), avoiding a UX cliff where the agent stops after compaction instead of continuing the task. It only applies to pi < 0.84.4 - from 0.84.4 on, pi core resumes the run itself, so pi-vcc never sends its own continue (a second one would land as a ghost turn). `false` disables it on every version.
+- **`smartKeepTail`** *(default `true`)*: when `true`, pi-vcc boosts the default `keep:1` to the largest `N` whose tail stays ≤ 25k tokens, but only when the `keep:1` tail is already small (≤ 5k tokens). Explicit `keep:N` from the user is always respected.
+- **`continueAfterThresholdCompact`** *(default `true`)*: permission for pi-vcc to continue after a successful automatic compaction. Pi 0.84.4 and later already resume Pi-owned threshold and overflow compactions, so pi-vcc does not add a second continuation there. The inter-turn trigger uses the manual compaction API and still needs this continuation on every Pi version. Set this to `false` to stop after either kind of compaction.
+- **`interTurnCompactionTokens`** *(default `250000`)*: active-context limit checked before every provider request, including requests inside one long tool loop. Set it to `null` to disable this trigger and rely on Pi's end-of-run context check.
 - **`debug`** *(default `false`)*: when `true`, each compaction writes detailed info to `/tmp/pi-vcc-debug.json` — message counts, cut boundary, summary preview, sections, token estimate calibration.
 
 ## Benchmarks
