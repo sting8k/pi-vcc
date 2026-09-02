@@ -142,3 +142,37 @@ describe("/pi-vcc-recall command pagination and hard-cap truncation signaling", 
     }
   });
 });
+
+// Issue #1: a brand-new session has no JSONL on disk yet.
+describe("/pi-vcc-recall in a fresh session with no session file on disk", () => {
+  const freshSessionFile = () => {
+    const dir = mkdtempSync(join(tmpdir(), "pi-vcc-recall-fresh-"));
+    return { dir, file: join(dir, "sessions", "not-written-yet.jsonl") };
+  };
+
+  it("no-query path answers with the empty-history message instead of throwing ENOENT", async () => {
+    const { dir, file } = freshSessionFile();
+    try {
+      const { handler, sent } = register();
+      await invoke(handler, file, [], "");
+
+      expect(sent).toHaveLength(1);
+      expect(sent[0].content).toBe("No entries in session history.");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("query path answers with the no-match message instead of throwing ENOENT", async () => {
+    const { dir, file } = freshSessionFile();
+    try {
+      const { handler, sent } = register();
+      await invoke(handler, file, [], "redis cache decision");
+
+      expect(sent).toHaveLength(1);
+      expect(sent[0].content).toBe('No matches for "redis cache decision" in session history.');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

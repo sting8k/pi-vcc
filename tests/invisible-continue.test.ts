@@ -3,8 +3,56 @@ import {
   registerBeforeCompactHook,
   triggerInvisibleContinue,
   buildOwnCut,
+  shouldScheduleAutoContinue,
   AUTO_CONTINUE_CUSTOM_TYPE,
+  PI_SELF_RESUME_VERSION,
 } from "../src/hooks/before-compact";
+
+// Versions are injected, never read from the installed pi package, so these
+// stay stable when the peer dependency is bumped.
+describe("auto-continue eligibility: setting x running pi version", () => {
+  it("boundary constant is the reported self-resume version 0.84.4", () => {
+    expect([...PI_SELF_RESUME_VERSION]).toEqual([0, 84, 4]);
+  });
+
+  it("setting false disables the continue on every version", () => {
+    expect(shouldScheduleAutoContinue(false, "0.75.1")).toBe(false);
+    expect(shouldScheduleAutoContinue(false, "0.84.3")).toBe(false);
+    expect(shouldScheduleAutoContinue(false, "0.84.4")).toBe(false);
+  });
+
+  it("setting true keeps the fallback on pi versions that do not self-resume", () => {
+    expect(shouldScheduleAutoContinue(true, "0.70.2")).toBe(true);
+    expect(shouldScheduleAutoContinue(true, "0.75.1")).toBe(true);
+    expect(shouldScheduleAutoContinue(true, "0.84.3")).toBe(true);
+  });
+
+  it("0.84.3 vs 0.84.4 is the exact cut-off", () => {
+    expect(shouldScheduleAutoContinue(true, "0.84.3")).toBe(true);
+    expect(shouldScheduleAutoContinue(true, "0.84.4")).toBe(false);
+  });
+
+  it("newer pi never gets a pi-vcc continue, even with the setting on", () => {
+    expect(shouldScheduleAutoContinue(true, "0.84.5")).toBe(false);
+    expect(shouldScheduleAutoContinue(true, "0.85.0")).toBe(false);
+    expect(shouldScheduleAutoContinue(true, "1.0.0")).toBe(false);
+    expect(shouldScheduleAutoContinue(true, "0.100.0")).toBe(false); // numeric, not lexicographic
+  });
+
+  it("prerelease/build suffixes compare on the version core", () => {
+    expect(shouldScheduleAutoContinue(true, "0.84.3-rc.1")).toBe(true);
+    expect(shouldScheduleAutoContinue(true, "0.84.4-rc.1")).toBe(false); // already carries self-resume
+    expect(shouldScheduleAutoContinue(true, "0.84.4+build.7")).toBe(false);
+    expect(shouldScheduleAutoContinue(true, "v0.84.3")).toBe(true);
+    expect(shouldScheduleAutoContinue(true, " 0.84.3 ")).toBe(true);
+  });
+
+  it("malformed or unreadable versions fail safe to no continue", () => {
+    for (const bad of ["", "0.84", "abc", "0.x.4", "0.84.4.1", undefined, null, 84, {}]) {
+      expect(shouldScheduleAutoContinue(true, bad)).toBe(false);
+    }
+  });
+});
 
 describe("invisible auto-continue: trigger + context filter", () => {
   it("triggerInvisibleContinue sends a hidden custom message with followUp delivery", () => {
