@@ -13,7 +13,7 @@ export interface LoadedMessages {
  * Pi only creates the session JSONL once it persists the first entry, so a
  * brand-new session has no file on disk. That is an empty current-session
  * history, not a failure. Every other error (permissions, I/O, a path that is
- * not a file) still propagates — silently reporting corruption as "no history"
+ * not a file) still propagates - silently reporting corruption as "no history"
  * would hide a real problem.
  */
 const readSessionFile = (sessionFile: string): string => {

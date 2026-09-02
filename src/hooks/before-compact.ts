@@ -53,14 +53,14 @@ export const AUTO_CONTINUE_CUSTOM_TYPE = "pi-vcc-auto-continue";
  * First Pi version that resumes the run by itself after an automatic compaction.
  * From this version on pi-vcc's fallback continue is redundant, and because it is
  * scheduled blind (setTimeout(0), no idle check) it lands as a ghost turn once the
- * self-resumed run ends — see issue #22, which reports both behaviours on 0.84.4.
+ * self-resumed run ends - see issue #22, which reports both behaviours on 0.84.4.
  * Kept as a [major, minor, patch] tuple so there is one source of truth.
  */
 export const PI_SELF_RESUME_VERSION: readonly [number, number, number] = [0, 84, 4];
 
 /**
  * Minimal semver core parse: [major, minor, patch], or null when unusable.
- * Prerelease/build suffixes are dropped, so 0.84.4-rc.1 counts as 0.84.4 — the
+ * Prerelease/build suffixes are dropped, so 0.84.4-rc.1 counts as 0.84.4 - the
  * safe direction, since such a build already carries the self-resume behaviour.
  */
 const parseVersionCore = (version: unknown): [number, number, number] | null => {
