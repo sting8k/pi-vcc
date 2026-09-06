@@ -2,6 +2,12 @@
 
 All notable changes to `@sting8k/pi-vcc` are documented in this file.
 
+## [0.7.2]
+
+### Fixes
+
+- **Recall: stream session JSONL files larger than V8's string limit** - Recall now parses session transcripts incrementally instead of decoding the entire file as one UTF-8 string, preventing `ERR_STRING_TOO_LONG` on long-running sessions. Message indices, lineage filtering, malformed-line handling, missing-file behavior, and final records without a trailing newline are preserved. Verified against a 536,885,410-byte synthetic transcript: the previous loader failed at V8's 536,870,888-character limit, while the streamed loader returned the expected messages and global indices.
+
 ## [0.7.1]
 
 ### Fixes
