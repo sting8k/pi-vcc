@@ -27,6 +27,27 @@ describe("loadAllMessages", () => {
     }
   });
 
+  it("loads JSONL incrementally across read-chunk boundaries", () => {
+    const dir = mkdtempSync(join(tmpdir(), "pi-vcc-load-chunked-"));
+    const file = join(dir, "session.jsonl");
+    try {
+      const largeText = `${"x".repeat(70_000)} unicode: λ`;
+      const lines = [
+        JSON.stringify({ type: "message", id: "m1", message: { role: "user", content: largeText } }),
+        JSON.stringify({ type: "message", id: "m2", message: { role: "user", content: "after boundary" } }),
+      ];
+      // Deliberately omit the final newline to cover the buffered tail as well.
+      writeFileSync(file, lines.join("\n"), "utf8");
+
+      const loaded = loadAllMessages(file, true);
+      expect(loaded.rendered).toHaveLength(2);
+      expect(loaded.rendered[0].summary).toBe(largeText);
+      expect(loaded.rendered[1].summary).toBe("after boundary");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("treats a not-yet-written session file as empty history instead of throwing ENOENT", () => {
     // Fresh session: pi has not persisted any entry, so the JSONL does not exist.
     const dir = mkdtempSync(join(tmpdir(), "pi-vcc-load-missing-"));
