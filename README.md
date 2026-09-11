@@ -155,7 +155,8 @@ Config lives at `~/.pi/agent/pi-vcc-config.json` (auto-scaffolded on first load 
   "overrideDefaultCompaction": true,
   "smartKeepTail": true,
   "continueAfterThresholdCompact": true,
-  "debug": false
+  "debug": false,
+  "trackCommands": []
 }
 ```
 
@@ -163,6 +164,7 @@ Config lives at `~/.pi/agent/pi-vcc-config.json` (auto-scaffolded on first load 
 - **`smartKeepTail`** *(default `true`)*: when `true`, pi-vcc boosts the default `keep:1` to the largest `N` whose tail stays ≤ 20k tokens, but only when the `keep:1` tail is already small (≤ 5k tokens). Explicit `keep:N` from the user is always respected.
 - **`continueAfterThresholdCompact`** *(default `true`)*: permission for pi-vcc to ask the agent to continue after a successful automatic compaction (threshold or overflow), avoiding a UX cliff where the agent stops after compaction instead of continuing the task. It only applies to pi < 0.84.4 - from 0.84.4 on, pi core resumes the run itself, so pi-vcc never sends its own continue (a second one would land as a ghost turn). `false` disables it on every version.
 - **`debug`** *(default `false`)*: when `true`, each compaction writes detailed info to `/tmp/pi-vcc-debug.json` — message counts, cut boundary, summary preview, sections, token estimate calibration.
+- **`trackCommands`** *(default `[]`)*: command names to record in a `[Commands Run]` section, e.g. `["ssh", "kubectl", "docker", "aws"]` — useful for infrastructure-operations sessions that don't touch a git repo or edit files at all, which otherwise get a much thinner compaction summary than a coding session does. Each entry is a truncated one-line snapshot (command name plus everything up to the next real shell separator) rather than a parsed structure, so there's no per-command argument grammar to keep in sync as any given CLI's flags change. Also detects a tracked command nested inside an `ssh host "<command>"` remote-command string. Empty by default (feature off).
 
 ## Benchmarks
 

@@ -60,6 +60,7 @@ export const formatSummary = (data: SectionData, options: FormatSummaryOptions =
     section("Session Goal", data.sessionGoal),
     section("Files And Changes", data.filesAndChanges),
     section("Commits", data.commits),
+    section("Commands Run", data.trackedCommands),
     section("Outstanding Context", data.outstandingContext),
     section("User Preferences", data.userPreferences),
   ].filter(Boolean);

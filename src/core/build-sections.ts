@@ -5,6 +5,7 @@ import { extractGoals } from "../extract/goals";
 import { extractFiles } from "../extract/files";
 import { extractPreferences, dedupPreferencesAgainstGoals } from "../extract/preferences";
 import { extractCommits, formatCommits } from "../extract/commits";
+import { extractTrackedCommands, formatTrackedCommands } from "../extract/tracked-commands";
 import { buildBriefSections, stringifyBrief } from "./brief";
 
 export interface BuildSectionsInput {
@@ -12,6 +13,9 @@ export interface BuildSectionsInput {
   briefBlocks?: NormalizedBlock[];
   /** Hook-provided file activity; authoritative for files touched before this compaction. */
   fileOps?: FileOps;
+  /** Command names to record in a [Commands Run] section (see
+   * PiVccSettings.trackCommands). Empty/omitted = section stays empty. */
+  trackCommands?: readonly string[];
 }
 
 const BLOCKER_RE =
@@ -71,6 +75,7 @@ export const buildSections = (input: BuildSectionsInput): SectionData => {
     filesAndChanges: formatFileActivity(blocks, input.fileOps),
     commits: formatCommits(extractCommits(blocks)),
     userPreferences,
+    trackedCommands: formatTrackedCommands(extractTrackedCommands(blocks, input.trackCommands ?? [])),
     briefTranscript: stringifyBrief(briefSections),
   };
 };

@@ -88,6 +88,68 @@ describe("compile", () => {
   });
 });
 
+describe("compile with trackCommands", () => {
+  it("omits Commands Run by default even with real trackable commands", () => {
+    const r = compile({
+      messages: [userMsg("restart the backend"), assistantWithToolCall("bash", { command: "ssh prod-server 'docker restart web-frontend'" })],
+    });
+    expect(r).not.toContain("[Commands Run]");
+  });
+
+  it("includes Commands Run when explicitly enabled, including the nested ssh remote command", () => {
+    const r = compile({
+      messages: [userMsg("restart the backend"), assistantWithToolCall("bash", { command: "ssh prod-server 'docker restart web-frontend'" })],
+      trackCommands: ["ssh", "docker"],
+    });
+    expect(r).toContain("[Commands Run]");
+    expect(r).toContain("ssh: ssh prod-server");
+    expect(r).toContain("docker: docker restart web-frontend");
+  });
+
+  it("merges Commands Run across compactions, deduping by command name", () => {
+    const previousSummary = [
+      "[Commands Run]\n- ssh: ssh prod-server | ssh staging-server",
+      "---",
+      "[user]\nfirst task",
+    ].join("\n\n");
+    const r = compile({
+      previousSummary,
+      messages: [userMsg("now check another host"), assistantWithToolCall("bash", { command: "ssh build-mac 'uptime'" })],
+      trackCommands: ["ssh"],
+    });
+    expect(r).toContain("[Commands Run]");
+    expect(r).toContain("ssh prod-server");
+    expect(r).toContain("ssh staging-server");
+    expect(r).toContain("ssh build-mac");
+  });
+
+  it("does not corrupt an entry containing a literal pipe-adjacent comma across a merge round-trip", () => {
+    const previousSummary = [
+      "[Commands Run]\n- kubectl: kubectl get pods,svc -n production",
+      "---",
+      "[user]\nfirst task",
+    ].join("\n\n");
+    const r = compile({
+      previousSummary,
+      messages: [userMsg("next")],
+      trackCommands: ["kubectl"],
+    });
+    expect(r).toContain("kubectl get pods,svc -n production");
+  });
+
+  it("multiline bash blocks are captured through the full compile pipeline, not just the first line", () => {
+    const r = compile({
+      messages: [
+        userMsg("deploy"),
+        assistantWithToolCall("bash", { command: "cd /app\nssh prod-server 'docker restart web'\nkubectl get pods -n prod" }),
+      ],
+      trackCommands: ["ssh", "docker", "kubectl"],
+    });
+    expect(r).toContain("docker restart web");
+    expect(r).toContain("kubectl get pods -n prod");
+  });
+});
+
 describe("compile fileOps wiring", () => {
   it("renders hook-provided file ops in the summary", () => {
     // Guards the seam: CompileInput.fileOps -> buildSections -> extractFiles.

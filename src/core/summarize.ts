@@ -10,13 +10,17 @@ export interface CompileInput {
   messages: Message[];
   previousSummary?: string;
   fileOps?: FileOps;
+  /** See BuildSectionsInput.trackCommands (core/build-sections.ts) --
+   * empty/omitted by default, threaded through from
+   * PiVccSettings.trackCommands by the caller (hooks/before-compact.ts). */
+  trackCommands?: readonly string[];
 }
 
 export interface RankedCompileInput extends CompileInput {
   ranking?: BriefRankingOptions;
 }
 
-const HEADER_NAMES = ["Session Goal", "Files And Changes", "Commits", "Outstanding Context", "User Preferences"];
+const HEADER_NAMES = ["Session Goal", "Files And Changes", "Commits", "Commands Run", "Outstanding Context", "User Preferences"];
 
 const SEPARATOR = "\n\n---\n\n";
 
@@ -54,6 +58,15 @@ const mergeHeaderSection = (header: string, prev: string, fresh: string): string
   // Files And Changes: merge by category (Modified/Created/Read), dedup paths
   if (header === "Files And Changes") {
     return mergeFileLines(prev, fresh);
+  }
+
+  // Commands Run: same categorized-merge shape as Files And Changes, but
+  // categories are whatever command names the user configured in
+  // trackCommands -- discover them from the actual text rather than a
+  // fixed list, so a config change between compactions doesn't orphan a
+  // category that was already recorded.
+  if (header === "Commands Run") {
+    return mergeTrackedCommandLines(prev, fresh);
   }
 
   // Session Goal, User Preferences: line-level dedup, cap
@@ -132,6 +145,28 @@ const mergeFileLines = (prev: string, fresh: string): string => {
   return formatCategorizedLines("Files And Changes", merged, FILE_CATEGORIES, ", ");
 };
 
+/** Category names actually present in "- <name>: ..." lines in `text`. */
+const discoverCategoryNames = (text: string): string[] => {
+  const names = new Set<string>();
+  for (const line of text.split("\n")) {
+    const m = line.match(/^- ([^:]+): /);
+    if (m) names.add(m[1]);
+  }
+  return [...names];
+};
+
+/**
+ * Merge Commands Run by whatever command names actually appear in prev/
+ * fresh (not a fixed category list, since trackCommands is user-config).
+ * Split/join on " | " rather than "," -- a captured one-liner entry (e.g.
+ * `kubectl get pods,svc -n prod`) can legitimately contain a comma.
+ */
+const mergeTrackedCommandLines = (prev: string, fresh: string): string => {
+  const categories = [...new Set([...discoverCategoryNames(prev), ...discoverCategoryNames(fresh)])];
+  const merged = mergeCategorizedLines(categories, prev, fresh, " | ");
+  return formatCategorizedLines("Commands Run", merged, categories, " | ");
+};
+
 const mergeBriefTranscript = (prev: string, fresh: string): string => {
   if (!prev) return fresh;
   if (!fresh) return prev;
@@ -198,7 +233,7 @@ interface CompileWithBriefBlocksOptions {
 const compileWithBriefBlocks = (input: CompileInput, options: CompileWithBriefBlocksOptions = {}): string => {
   const blocks = filterNoise(normalize(input.messages));
   const briefBlocks = options.briefBlocksFor?.(blocks);
-  const data = buildSections({ blocks, briefBlocks, fileOps: input.fileOps });
+  const data = buildSections({ blocks, briefBlocks, fileOps: input.fileOps, trackCommands: input.trackCommands });
   const fresh = formatSummary(data, { capBriefTranscript: options.capFreshBrief ?? true });
   // Strip any legacy RECALL_NOTE baked into prev summary (pre-fix format)
   // so merge doesn't re-stack it inside the brief.

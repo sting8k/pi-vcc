@@ -8,6 +8,7 @@ const empty: SectionData = {
   filesAndChanges: [],
   commits: [],
   userPreferences: [],
+  trackedCommands: [],
   briefTranscript: "",
 };
 
