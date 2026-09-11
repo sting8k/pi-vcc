@@ -8,6 +8,23 @@ describe("buildSections", () => {
     expect(r.sessionGoal).toEqual([]);
     expect(r.outstandingContext).toEqual([]);
     expect(r.briefTranscript).toBe("");
+    expect(r.trackedCommands).toEqual([]);
+  });
+
+  it("trackedCommands stays empty by default, even with real tracked-looking commands present", () => {
+    const blocks: NormalizedBlock[] = [
+      { kind: "tool_call", name: "bash", args: { command: "ssh prod-server 'docker ps'" } },
+    ];
+    const r = buildSections({ blocks });
+    expect(r.trackedCommands).toEqual([]);
+  });
+
+  it("populates trackedCommands only when trackCommands is explicitly non-empty", () => {
+    const blocks: NormalizedBlock[] = [
+      { kind: "tool_call", name: "bash", args: { command: "ssh prod-server" } },
+    ];
+    const r = buildSections({ blocks, trackCommands: ["ssh"] });
+    expect(r.trackedCommands).toEqual(["ssh: ssh prod-server"]);
   });
 
   it("populates sections from realistic blocks", () => {

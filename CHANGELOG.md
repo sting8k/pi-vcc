@@ -2,6 +2,16 @@
 
 All notable changes to `@sting8k/pi-vcc` are documented in this file.
 
+## [Unreleased]
+
+### Features
+
+- **Optional `[Commands Run]` section for infrastructure-operations sessions** - New `trackCommands` setting (default `[]`, e.g. `["ssh", "kubectl", "docker", "aws"]`). When non-empty, adds a section listing a shallow, truncated one-line snapshot of every invocation of a tracked command name seen in `bash` tool calls -- the same idea as `[Files And Changes]`/`[Commits]`, but for sessions that don't touch a git repo or edit files at all. Deliberately shallow (no per-command argument parsing), so there's no CLI-specific grammar to maintain as flags evolve; also detects a tracked command nested inside an `ssh host "<command>"` remote-command string. Empty by default, zero behavior change for existing configs.
+
+### Internal
+
+- Extracted `mergeFileLines`'s category-parse-merge-render logic into generic, reusable `mergeCategorizedLines`/`formatCategorizedLines` helpers (no behavior change to `[Files And Changes]`), now shared with `[Commands Run]`'s merge logic.
+
 ## [0.7.2]
 
 ### Fixes

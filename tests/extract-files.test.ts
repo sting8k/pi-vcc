@@ -37,4 +37,8 @@ describe("settings defaults", () => {
   it("overrides pi core compaction by default", () => {
     expect(DEFAULT_SETTINGS.overrideDefaultCompaction).toBe(true);
   });
+
+  it("trackCommands is empty (feature off) by default", () => {
+    expect(DEFAULT_SETTINGS.trackCommands).toEqual([]);
+  });
 });

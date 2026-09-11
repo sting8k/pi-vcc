@@ -706,6 +706,7 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI, piVersion: string = 
         readFiles: [...preparation.fileOps.read],
         modifiedFiles: [...preparation.fileOps.written, ...preparation.fileOps.edited],
       },
+      trackCommands: settings.trackCommands,
       ranking: {
         maxBriefChars: Math.round(RANKED_BRIEF_BUDGET_TOKENS * tokenEstimate.charsPerToken),
         maxBriefCharsCeiling: Math.round(RANKED_BRIEF_CEILING_TOKENS * tokenEstimate.charsPerToken),
