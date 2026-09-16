@@ -2,7 +2,7 @@
 
 All notable changes to `@sting8k/pi-vcc` are documented in this file.
 
-## [Unreleased]
+## [0.7.3]
 
 ### Fixes
 
@@ -11,6 +11,9 @@ All notable changes to `@sting8k/pi-vcc` are documented in this file.
 ### Other
 
 - **Added MIT license** — `LICENSE` file plus `"license": "MIT"` in `package.json` (fixes #31).
+- **Added CI** — a minimal GitHub Actions test workflow (`bun test` on pull requests and master pushes) with supply-chain hygiene: `pull_request` trigger (never `pull_request_target`), `contents: read` token scope, commit-SHA-pinned actions, `persist-credentials: false`, pinned `bun-version`, and `bun install --frozen-lockfile --ignore-scripts`.
+- **Committed `bun.lock`** — it was gitignored and stale since April, so installs drifted (the `pi-coding-agent` peer range resolved to latest instead of the version under development). The refreshed lockfile pins pi `0.85.1` and makes CI reproducible.
+- **`tests/real-sessions.test.ts` skips cleanly when no `~/.pi` sessions exist** (CI runners) instead of failing on `ENOENT`.
 
 ## [0.7.2]
 
