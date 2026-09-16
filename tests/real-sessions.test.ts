@@ -8,13 +8,15 @@ import { loadSessionMessages } from "./support/load-session";
 
 let samples: SessionSample[] = [];
 
-beforeAll(async () => {
-  samples = await prepareSessionSamples(2);
-});
-
 // Integration test against real ~/.pi session transcripts — skipped where no
-// sessions exist (CI runners) instead of failing on ENOENT.
+// sessions exist (CI runners) instead of failing on ENOENT. The guard must
+// live in beforeAll too: file-scope hooks run even when the describe below
+// is skipped.
 const HAS_SESSIONS = existsSync(join(homedir(), ".pi/agent/sessions"));
+
+beforeAll(async () => {
+  if (HAS_SESSIONS) samples = await prepareSessionSamples(2);
+});
 
 describe.if(HAS_SESSIONS)("real session integration", () => {
   it("compiles copied large sessions without mutating originals", async () => {
