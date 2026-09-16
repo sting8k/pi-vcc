@@ -327,7 +327,11 @@ export const buildBriefSections = (blocks: NormalizedBlock[]): BriefLine[] => {
     for (const line of sec.lines) {
       if (!line.startsWith("* ")) { out.push(line); continue; }
       const ref = line.match(/\(#(\d+)\)$/)?.[1] ?? "";
-      const base = ref ? line.slice(0, -(ref.length + 3)).trimEnd() : line;
+      // A ref-less line never joins a ref'd collapse group — merging it would
+      // emit a malformed "(#12, #) x2" once mixed ref/no-ref lines can occur
+      // (global indices: unresolved positions render no ref).
+      if (!ref) { out.push(line); continue; }
+      const base = line.slice(0, -(ref.length + 3)).trimEnd();
       const last = out.length > 0 ? out[out.length - 1] : "";
       const m = last.match(/^(.*) \((#[\d, #]+)\) x(\d+)$/);
       if (m && m[1] === base) {

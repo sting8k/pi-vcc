@@ -2,6 +2,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { convertToLlm, VERSION } from "@earendil-works/pi-coding-agent";
 import { writeFileSync } from "fs";
 import { compileRanked } from "../core/summarize";
+import { buildGlobalIndexById, loadGlobalIndexById } from "../core/global-indices";
 import { parseKeepAndPrompt, PI_VCC_COMPACT_INSTRUCTION } from "../core/compact-args";
 import { loadSettings, type PiVccSettings } from "../core/settings";
 import { calibrateCharsPerToken, estimateMessageContentChars, estimateMessageContentTokens, estimateTokensFromChars } from "../core/token-estimate";
@@ -257,6 +258,8 @@ export type OwnCutResult =
   | {
       ok: true;
       messages: any[];
+      /** Entry ids parallel to `messages` — used to resolve global `#N` refs. */
+      selectedIds: string[];
       firstKeptEntryId: string;
       compactAll: boolean;
       keptUserTurns: number;
@@ -322,6 +325,7 @@ export function buildOwnCut(branchEntries: any[], keepUserTurns = 1): OwnCutResu
   const compactAll = (keepFallbackToCompactAll: boolean) => ({
     ok: true as const,
     messages: liveMessages.map((e) => e.message),
+    selectedIds: liveMessages.map((e) => e.entry.id),
     firstKeptEntryId: "",
     compactAll: true,
     keptUserTurns: 0,
@@ -347,6 +351,7 @@ export function buildOwnCut(branchEntries: any[], keepUserTurns = 1): OwnCutResu
   return {
     ok: true,
     messages: liveMessages.slice(0, cutIdx).map((e) => e.message),
+    selectedIds: liveMessages.slice(0, cutIdx).map((e) => e.entry.id),
     firstKeptEntryId: liveMessages[cutIdx].entry.id,
     compactAll: false,
     keptUserTurns: userIndices.length - targetUserIdx,
@@ -395,6 +400,7 @@ export const applyTailBudget = (
   const budgetResult = (idx: number, budgetCut: BudgetCutKind): OwnCutResult => ({
     ok: true,
     messages: live.slice(0, idx).map((m) => m.message),
+    selectedIds: live.slice(0, idx).map((m) => m.entry.id),
     firstKeptEntryId: live[idx].entry.id,
     compactAll: false,
     keptUserTurns: live.slice(idx).filter((m) => m.message.role === "user").length,
@@ -650,8 +656,52 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI, piVersion: string = 
 
     pendingFollowUpPrompt = followUpPrompt;
     const agentMessages = ownCut.messages;
+    const agentSelectedIds = ownCut.selectedIds;
     const firstKeptEntryId = ownCut.firstKeptEntryId;
-    const messages = convertToLlm(agentMessages);
+
+    // ── Session-global indices for summary refs (issue #28) ──────────
+    // Recall numbers messages across the whole session file (all windows,
+    // all branches); the selected window is zero-based. Map each selected
+    // entry id to its global index so emitted (#N) refs resolve via recall.
+    // Primary source is the in-memory tree (file order, synchronously
+    // persisted); the session file is the streaming fallback.
+    let globalIndexById: Map<string, number> | undefined;
+    try {
+      const all = (ctx as any)?.sessionManager?.getEntries?.();
+      if (Array.isArray(all)) globalIndexById = buildGlobalIndexById(all);
+    } catch {
+      globalIndexById = undefined;
+    }
+    if (!globalIndexById) {
+      try {
+        const sf = (ctx as any)?.sessionManager?.getSessionFile?.();
+        if (typeof sf === "string" && sf) globalIndexById = loadGlobalIndexById(sf);
+      } catch {
+        globalIndexById = undefined;
+      }
+    }
+
+    // convertToLlm is elementwise (drops/replaces per message, order
+    // preserved), so align ids by converting singletons — never by position.
+    const convertedWithIndices: Array<{ message: any; sourceIndex: number | undefined }> = [];
+    for (let i = 0; i < agentMessages.length; i++) {
+      let converted: any[];
+      try {
+        converted = convertToLlm([agentMessages[i]]);
+      } catch {
+        continue;
+      }
+      if (converted.length === 0) continue;
+      convertedWithIndices.push({
+        message: converted[0],
+        sourceIndex: globalIndexById?.get(agentSelectedIds[i]),
+      });
+    }
+    const messages = convertedWithIndices.map((x) => x.message);
+    // Fail-closed: when no index map exists at all every slot is undefined,
+    // so refs are omitted rather than emitted window-relative (the bug being
+    // fixed). Parallel to `messages` by construction.
+    const sourceIndices = convertedWithIndices.map((x) => x.sourceIndex);
 
     // Count kept messages and estimate tokens
     const keptIdx = (branchEntries as any[]).findIndex((e: any) => e.id === firstKeptEntryId);
@@ -701,6 +751,7 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI, piVersion: string = 
     const RANKED_BRIEF_TOKENS_PER_BLOCK = 15;
     const summary = compileRanked({
       messages,
+      sourceIndices,
       previousSummary: preparation.previousSummary,
       fileOps: {
         readFiles: [...preparation.fileOps.read],
@@ -743,7 +794,9 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI, piVersion: string = 
 
     const details: PiVccCompactionDetails = {
       compactor: "pi-vcc",
-      version: 1,
+      // version 2 = refs are session-global (recall index space); version 1
+      // summaries carried window-relative refs (issue #28).
+      version: 2,
       sections: [...summary.matchAll(/^\[(.+?)\]/gm)].map((m) => m[1]),
       sourceMessageCount: agentMessages.length,
       previousSummaryUsed: Boolean(preparation.previousSummary),
