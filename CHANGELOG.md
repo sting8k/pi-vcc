@@ -2,6 +2,16 @@
 
 All notable changes to `@sting8k/pi-vcc` are documented in this file.
 
+## [Unreleased]
+
+### Fixes
+
+- **Compaction summaries now emit session-global `#N` refs (the recall index space).** Summaries previously numbered the selected compaction window from zero, while `vcc_recall` resolves `#N` against every `type == "message"` entry in the session file. From the second compaction on — and on any session containing abandoned branches — emitted `(#N)` refs retrieved unrelated operations or failed lineage checks. The hook now maps each selected entry id to its global index via a shared counting rule (`src/core/global-indices.ts`, used by both recall and the summary path) and threads per-message indices through `compile`/`compileRanked`; unresolvable positions (custom messages, branch summaries, ambiguous ids, or no index map at all) render no ref instead of a wrong one. Summary details version bumped to `2` to mark the new ref scheme. Ported from k0valik/pi-blackhole commit `f82e07a` — thanks @k0valik for the report and reference fix. Known limitations: summaries minted before this fix keep their window-relative refs until they roll off the brief budget, and branched sessions (`/tree`) write a new file where copied refs point at the old file's index space (unchanged from before).
+
+### Other
+
+- **Added MIT license** — `LICENSE` file plus `"license": "MIT"` in `package.json` (fixes #31).
+
 ## [0.7.2]
 
 ### Fixes

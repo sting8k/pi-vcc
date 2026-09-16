@@ -10,6 +10,12 @@ export interface CompileInput {
   messages: Message[];
   previousSummary?: string;
   fileOps?: FileOps;
+  /**
+   * Session-global `#N` index per message position (see
+   * src/core/global-indices.ts). Parallel to `messages`; a missing entry
+   * renders as no ref (fail-closed). Omitted entirely → legacy positional.
+   */
+  sourceIndices?: Array<number | undefined>;
 }
 
 export interface RankedCompileInput extends CompileInput {
@@ -171,7 +177,7 @@ interface CompileWithBriefBlocksOptions {
 }
 
 const compileWithBriefBlocks = (input: CompileInput, options: CompileWithBriefBlocksOptions = {}): string => {
-  const blocks = filterNoise(normalize(input.messages));
+  const blocks = filterNoise(normalize(input.messages, input.sourceIndices));
   const briefBlocks = options.briefBlocksFor?.(blocks);
   const data = buildSections({ blocks, briefBlocks, fileOps: input.fileOps });
   const fresh = formatSummary(data, { capBriefTranscript: options.capFreshBrief ?? true });
