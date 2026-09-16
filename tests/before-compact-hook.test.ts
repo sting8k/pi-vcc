@@ -998,3 +998,98 @@ describe("registerBeforeCompactHook: skipForProviders (#27)", () => {
     expect(mock.userMessages).toEqual([]);
   });
 });
+
+describe("registerBeforeCompactHook: skipCustomTypes", () => {
+  beforeEach(() => {
+    if (existsSync(DEBUG_PATH)) unlinkSync(DEBUG_PATH);
+  });
+  afterEach(() => {
+    if (existsSync(CONFIG_PATH)) unlinkSync(CONFIG_PATH);
+    if (existsSync(DEBUG_PATH)) unlinkSync(DEBUG_PATH);
+  });
+
+  // Smart-keep lifts the tail to ~2 user turns, so entries before u2 land
+  // in the summarized window: [c1, u1, a1]. Custom entries must sit early
+  // to be inside that window.
+  const baseEntries = () => [
+    custom("c1", "memory-inject", "INJECTED_BOILERPLATE_XYZ"),
+    msg("u1", "user", "go"),
+    msg("a1", "assistant", "reply"),
+    msg("u2", "user", "next"),
+    msg("a2", "assistant", "done"),
+    msg("u3", "user", "more"),
+    msg("a3", "assistant", "ok"),
+  ];
+
+  // Uses the /compact path (no customInstructions) so session_compact emits
+  // the stats toast — the /pi-vcc path shows its own onComplete toast instead.
+  const runCompact = (skipCustomTypes: unknown) => {
+    setConfig({ debug: true, overrideDefaultCompaction: true, skipCustomTypes });
+    const { pi, invokeBefore, invokeCompact, notifyCalls } = createMockPi();
+    registerBeforeCompactHook(pi);
+    const result = invokeBefore(makeEvent(baseEntries()));
+    const snap = JSON.parse(readFileSync(DEBUG_PATH, "utf-8"));
+    if (existsSync(DEBUG_PATH)) unlinkSync(DEBUG_PATH);
+    return { result, snap, invokeCompact, notifyCalls };
+  };
+
+  test("listed customType is excluded from summarizer input, others still pass", () => {
+    const entries = [
+      custom("c1", "memory-inject", "INJECTED_BOILERPLATE_XYZ"),
+      custom("c2", "other-ext-note", "KEEP_ME_MARKER", { display: true }),
+      msg("u1", "user", "go"),
+      msg("a1", "assistant", "reply"),
+      msg("u2", "user", "next"),
+      msg("a2", "assistant", "done"),
+      msg("u3", "user", "more"),
+      msg("a3", "assistant", "ok"),
+    ];
+    setConfig({ debug: true, overrideDefaultCompaction: false, skipCustomTypes: ["memory-inject"] });
+    const { pi, invokeBefore } = createMockPi();
+    registerBeforeCompactHook(pi);
+    const result = invokeBefore(makeEvent(entries, PI_VCC_COMPACT_INSTRUCTION));
+    expect(result.cancel).toBeUndefined();
+    const snap = JSON.parse(readFileSync(DEBUG_PATH, "utf-8"));
+    const raw = JSON.stringify(snap);
+    expect(raw).not.toContain("INJECTED_BOILERPLATE_XYZ");
+    expect(raw).toContain("KEEP_ME_MARKER");
+  });
+
+  // lastStats is module state — the stats toast must fire before the next
+  // runCompact() overwrites it, so interleave compact→toast per run.
+  const keptToastOf = async (run: ReturnType<typeof runCompact>) => {
+    await run.invokeCompact({ type: "session_compact", fromExtension: true, compactionEntry: { details: { compactor: "pi-vcc" } }, reason: "threshold", willRetry: false });
+    // Stats notify is scheduled via setTimeout(500) — wait past it.
+    await new Promise((resolve) => setTimeout(resolve, 550));
+    return run.notifyCalls.find((c: { msg: string }) => c.msg.startsWith("pi-vcc: kept"))?.msg;
+  };
+
+  test("filtering does not move the cut: firstKeptEntryId and kept turns identical on/off", async () => {
+    const on = runCompact(["memory-inject"]);
+    const onToast = await keptToastOf(on);
+    const off = runCompact([]);
+    const offToast = await keptToastOf(off);
+
+    expect(on.result.compaction.firstKeptEntryId).toBe(off.result.compaction.firstKeptEntryId);
+    expect(on.snap.messagesToSummarize).toBe(off.snap.messagesToSummarize - 1);
+    // Kept-turn counting is upstream of the filter → identical toast prefix.
+    expect(onToast?.match(/kept \d+\/\d+ turns/)?.[0]).toBe(offToast?.match(/kept \d+\/\d+ turns/)?.[0]);
+    // And the summarized count reflects the filtered input.
+    expect(onToast).toContain(`summarized ${on.snap.messagesToSummarize}`);
+    expect(offToast).toContain(`summarized ${off.snap.messagesToSummarize}`);
+  });
+
+  test("malformed skipCustomTypes (bare string) fails closed: nothing skipped", () => {
+    const { snap } = runCompact("memory-inject");
+    expect(JSON.stringify(snap)).toContain("INJECTED_BOILERPLATE_XYZ");
+  });
+
+  test("default (no setting) keeps current behavior: nothing skipped", () => {
+    setConfig({ debug: true, overrideDefaultCompaction: false });
+    const { pi, invokeBefore } = createMockPi();
+    registerBeforeCompactHook(pi);
+    invokeBefore(makeEvent(baseEntries(), PI_VCC_COMPACT_INSTRUCTION));
+    const snap = JSON.parse(readFileSync(DEBUG_PATH, "utf-8"));
+    expect(JSON.stringify(snap)).toContain("INJECTED_BOILERPLATE_XYZ");
+  });
+});
