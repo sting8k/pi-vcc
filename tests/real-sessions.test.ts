@@ -1,4 +1,7 @@
 import { beforeAll, describe, expect, it } from "bun:test";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { buildCompactReport } from "../src/core/report";
 import { prepareSessionSamples, readSourceStat, type SessionSample } from "./support/real-sessions";
 import { loadSessionMessages } from "./support/load-session";
@@ -9,7 +12,11 @@ beforeAll(async () => {
   samples = await prepareSessionSamples(2);
 });
 
-describe("real session integration", () => {
+// Integration test against real ~/.pi session transcripts — skipped where no
+// sessions exist (CI runners) instead of failing on ENOENT.
+const HAS_SESSIONS = existsSync(join(homedir(), ".pi/agent/sessions"));
+
+describe.if(HAS_SESSIONS)("real session integration", () => {
   it("compiles copied large sessions without mutating originals", async () => {
     for (const sample of samples) {
       const before = await readSourceStat(sample);
