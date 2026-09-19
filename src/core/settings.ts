@@ -51,6 +51,15 @@ export interface PiVccSettings {
    * skip. Unknown/undefined model never skips.
    */
   skipForProviders: string[];
+  /**
+   * customType values whose custom_message entries are excluded from the
+   * summarizer input. Opt-in (default []). Intended for per-turn boilerplate
+   * injected by other extensions that is regenerated every turn.
+   * Exact match on customType. Filtering happens right before summarization:
+   * cut selection, token calibration, firstKeptEntryId and kept-user-turn
+   * counting are all unaffected.
+   */
+  skipCustomTypes: string[];
 }
 
 export const DEFAULT_SETTINGS: PiVccSettings = {
@@ -59,6 +68,7 @@ export const DEFAULT_SETTINGS: PiVccSettings = {
   continueAfterThresholdCompact: true,
   debug: false,
   skipForProviders: [],
+  skipCustomTypes: [],
 };
 
 const readJson = (path: string): Record<string, unknown> | null => {
@@ -80,6 +90,7 @@ export function loadSettings(): PiVccSettings {
   // A blind spread would leak a malformed array value (e.g. a bare string,
   // where .includes becomes substring matching) into the provider check.
   merged.skipForProviders = coerceStringArray(parsed.skipForProviders);
+  merged.skipCustomTypes = coerceStringArray(parsed.skipCustomTypes);
   return merged;
 }
 

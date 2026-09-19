@@ -662,8 +662,19 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI, piVersion: string = 
     }
 
     pendingFollowUpPrompt = followUpPrompt;
-    const agentMessages = ownCut.messages;
-    const agentSelectedIds = ownCut.selectedIds;
+    // Filter user-declared customTypes right before summarizer input
+    // (skipCustomTypes). Cut selection, token calibration, firstKeptEntryId
+    // and kept-user-turn counting are already fixed upstream — this only
+    // changes what the summarizer sees. The pair must stay aligned.
+    let agentMessages = ownCut.messages;
+    let agentSelectedIds = ownCut.selectedIds;
+    if (settings.skipCustomTypes.length > 0) {
+      const pairs = agentMessages
+        .map((m: any, i: number) => ({ m, id: agentSelectedIds[i] }))
+        .filter(({ m }: any) => !(m?.role === "custom" && settings.skipCustomTypes.includes(m?.customType)));
+      agentMessages = pairs.map((p: any) => p.m);
+      agentSelectedIds = pairs.map((p: any) => p.id);
+    }
     const firstKeptEntryId = ownCut.firstKeptEntryId;
 
     // ── Session-global indices for summary refs (issue #28) ──────────
