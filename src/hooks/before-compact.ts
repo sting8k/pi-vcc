@@ -552,6 +552,13 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI, piVersion: string = 
     const { isPiVcc, keepUserTurns, keepUserTurnsExplicit, followUpPrompt } = parseCompactionInstructions(customInstructions);
     pendingFollowUpPrompt = null;
     if (!isPiVcc && !settings.overrideDefaultCompaction) return;
+    // Provider-level opt-out (#27): defer to the provider's own compaction
+    // (e.g. remote compaction via pi-codex-compaction). Checked at call time
+    // because the model can change mid-session via /model. Explicit /pi-vcc
+    // bypasses the skip; undefined model never skips.
+    const provider = (ctx as any)?.model?.provider;
+    if (!isPiVcc && typeof provider === "string" &&
+        settings.skipForProviders.some((p) => p.toLowerCase() === provider.toLowerCase())) return;
 
     const calibrationCut = buildOwnCut(branchEntries as any[], 0);
     const calibrationMessageChars = calibrationCut.ok
@@ -821,6 +828,11 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI, piVersion: string = 
   pi.on("session_compact", async (event, ctx) => {
     const { reason, willRetry } = readCompactionEventContext(event);
     if (!event.fromExtension) return;
+    // The runner keeps the LAST non-null session_before_compact result, so
+    // another compaction extension can win even when pi-vcc also returned one.
+    // Read the truth from the persisted entry instead of lifecycle state:
+    // pi-vcc stamps details.compactor = "pi-vcc" on its own compactions.
+    if ((event as any).compactionEntry?.details?.compactor !== "pi-vcc") return;
     const followUpPrompt = pendingFollowUpPrompt;
     pendingFollowUpPrompt = null;
     if (lastCompactWasPiVcc) return; // /pi-vcc handles its own toast via onComplete

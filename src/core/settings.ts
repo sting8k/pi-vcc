@@ -43,6 +43,14 @@ export interface PiVccSettings {
   continueAfterThresholdCompact: boolean;
   /** Write debug snapshot to /tmp/pi-vcc-debug.json on each compaction. */
   debug: boolean;
+  /**
+   * Providers for which pi-vcc defers compaction entirely (issue #27), e.g.
+   * providers that ship their own remote compaction via another extension.
+   * Matched case-insensitively against ctx.model.provider (Pi's provider id —
+   * check /model; Grok is "xai", not "grok"). Explicit /pi-vcc bypasses the
+   * skip. Unknown/undefined model never skips.
+   */
+  skipForProviders: string[];
 }
 
 export const DEFAULT_SETTINGS: PiVccSettings = {
@@ -50,6 +58,7 @@ export const DEFAULT_SETTINGS: PiVccSettings = {
   smartKeepTail: true,
   continueAfterThresholdCompact: true,
   debug: false,
+  skipForProviders: [],
 };
 
 const readJson = (path: string): Record<string, unknown> | null => {
@@ -60,10 +69,18 @@ const readJson = (path: string): Record<string, unknown> | null => {
   }
 };
 
+/** Coerce a config value to string[], failing closed to []. */
+const coerceStringArray = (v: unknown): string[] =>
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+
 export function loadSettings(): PiVccSettings {
   const parsed = readJson(settingsPath());
   if (!parsed || typeof parsed !== "object") return { ...DEFAULT_SETTINGS };
-  return { ...DEFAULT_SETTINGS, ...(parsed as Partial<PiVccSettings>) };
+  const merged = { ...DEFAULT_SETTINGS, ...(parsed as Partial<PiVccSettings>) };
+  // A blind spread would leak a malformed array value (e.g. a bare string,
+  // where .includes becomes substring matching) into the provider check.
+  merged.skipForProviders = coerceStringArray(parsed.skipForProviders);
+  return merged;
 }
 
 /**

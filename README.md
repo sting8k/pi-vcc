@@ -155,7 +155,8 @@ Config lives at `~/.pi/agent/pi-vcc-config.json` (auto-scaffolded on first load 
   "overrideDefaultCompaction": true,
   "smartKeepTail": true,
   "continueAfterThresholdCompact": true,
-  "debug": false
+  "debug": false,
+  "skipForProviders": []
 }
 ```
 
@@ -163,6 +164,7 @@ Config lives at `~/.pi/agent/pi-vcc-config.json` (auto-scaffolded on first load 
 - **`smartKeepTail`** *(default `true`)*: when `true`, pi-vcc boosts the default `keep:1` to the largest `N` whose tail stays ≤ 20k tokens, but only when the `keep:1` tail is already small (≤ 5k tokens). Explicit `keep:N` from the user is always respected.
 - **`continueAfterThresholdCompact`** *(default `true`)*: permission for pi-vcc to ask the agent to continue after a successful automatic compaction (threshold or overflow), avoiding a UX cliff where the agent stops after compaction instead of continuing the task. It only applies to pi < 0.84.4 - from 0.84.4 on, pi core resumes the run itself, so pi-vcc never sends its own continue (a second one would land as a ghost turn). `false` disables it on every version.
 - **`debug`** *(default `false`)*: when `true`, each compaction writes detailed info to `/tmp/pi-vcc-debug.json` — message counts, cut boundary, summary preview, sections, token estimate calibration.
+- **`skipForProviders`** *(default `[]`)*: providers pi-vcc defers compaction for, so a provider-specific compaction extension (e.g. remote compaction for OpenAI/Grok models) can take over instead. Matched exactly and case-insensitively against Pi's provider id — check `/model` for the actual id (Grok is `xai`, not `grok`). The check runs per compaction, so switching models mid-session works. Explicit `/pi-vcc` always bypasses the skip.
 
 ## Benchmarks
 
