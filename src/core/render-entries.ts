@@ -26,12 +26,15 @@ const extractFilesFromContent = (content: Message["content"]): string[] => {
     .filter((p): p is string => p !== null);
 };
 
-export const renderMessage = (msg: Message, index: number, full = false): RenderedEntry => {
+const clipCap = (maxChars: number | undefined, dflt: number): number =>
+  maxChars !== undefined ? Math.min(maxChars, dflt) : dflt;
+
+export const renderMessage = (msg: Message, index: number, full = false, maxChars?: number): RenderedEntry => {
   if (msg.role === "user") {
-    return { index, role: "user", summary: full ? textOf(msg.content) : clip(textOf(msg.content), 300) };
+    return { index, role: "user", summary: full ? textOf(msg.content) : clip(textOf(msg.content), clipCap(maxChars, 300)) };
   }
   if (msg.role === "toolResult") {
-    const text = full ? textOf(msg.content) : clip(textOf(msg.content), 200);
+    const text = full ? textOf(msg.content) : clip(textOf(msg.content), clipCap(maxChars, 200));
     return {
       index, role: "tool_result",
       summary: `[${msg.toolName}] ${text}`,
@@ -41,13 +44,16 @@ export const renderMessage = (msg: Message, index: number, full = false): Render
   if ((msg as any).role === "bashExecution") {
     const cmd = (msg as any).command ?? "";
     const out = (msg as any).output ?? "";
-    const text = full ? `$ ${cmd}\n${out}` : clip(`$ ${cmd}\n${out}`, 300);
+    const text = full ? `$ ${cmd}\n${out}` : clip(`$ ${cmd}\n${out}`, clipCap(maxChars, 300));
     return { index, role: "bash", summary: text };
   }
-  const text = full ? textOf(msg.content) : clip(textOf(msg.content), 300);
+  const text = full ? textOf(msg.content) : clip(textOf(msg.content), clipCap(maxChars, 300));
   const tools = toolCalls(msg.content);
   const files = extractFilesFromContent(msg.content);
-  const summary = tools ? `${tools}\n${text}` : text;
+  const combined = tools ? `${tools}\n${text}` : text;
+  // When a maxChars cap is in effect, bound the whole summary (tool args
+  // included) so tool-heavy ranges actually stay lean.
+  const summary = !full && maxChars !== undefined ? clip(combined, Math.min(maxChars, 300)) : combined;
   return { index, role: "assistant", summary, ...(files.length > 0 && { files }) };
 };
 
