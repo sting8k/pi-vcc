@@ -2,6 +2,17 @@
 
 All notable changes to `@sting8k/pi-vcc` are documented in this file.
 
+## [0.8.0]
+
+### Features
+
+- **`skipForProviders` setting** — list of provider ids for which pi-vcc defers compaction entirely, so a provider-specific or remote compaction extension can take over. Matched case-insensitively against `ctx.model.provider` on every compaction (a `/model` switch mid-session is respected); explicit `/pi-vcc` always runs; an undefined model never skips. Needed because `session_before_compact` is last-result-wins by extension load order, so there was no way for users to pick the compactor deterministically. (fixes #27)
+- **`skipCustomTypes` setting** — list of `customType` values whose `custom_message` entries are dropped from the summarizer input. Aimed at per-turn boilerplate injected by other extensions (skill cards, guidance blocks) that is regenerated every turn. Exact, case-sensitive match. Only the summary input is filtered: cut selection, token calibration, `firstKeptEntryId` and kept-turn counts are unchanged. Deliberately keyed on `customType` rather than `display: false`, which is a TUI-visibility flag that extensions also use for durable content. (refs #23)
+
+### Fixes
+
+- **Stale stats toast and spurious auto-continue on another extension's compaction.** `session_compact` only checked `event.fromExtension`, so when a different extension produced the compaction pi-vcc still showed its own stats toast with numbers from its last run and could queue its auto-continue. The handler now checks the persisted `compactionEntry.details.compactor === "pi-vcc"` stamp, which is also correct when another extension's `session_before_compact` result wins via load order.
+
 ## [0.7.3]
 
 ### Fixes
