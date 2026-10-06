@@ -1142,3 +1142,74 @@ describe("registerBeforeCompactHook: trackCommands", () => {
     expect(summaryWith({})).not.toContain("[Tracked Commands]");
   });
 });
+
+describe("post-compaction context estimate", () => {
+  const base = {
+    summarized: 4,
+    kept: 2,
+    keptUserTurns: 1,
+    totalUserTurns: 2,
+    requestedKeepUserTurns: 1,
+    keepUserTurnsExplicit: false,
+    keepFallbackToCompactAll: false,
+    keptTokensEst: 5000,
+  };
+
+  test("formatCompactionStats leads with the context transition when calibrated", () => {
+    const msg = formatCompactionStats({ ...base, tokensBefore: 228481, postTokensEst: 91583 });
+    expect(msg).toContain("compacted 228.5k → 91.6k tok");
+    expect(msg).toContain("kept 1/2 turns");
+  });
+
+  test("formatCompactionStats keeps the budget-cut wording after the transition", () => {
+    const msg = formatCompactionStats({ ...base, tokensBefore: 100000, postTokensEst: 20000, budgetCut: "no_anchor" });
+    expect(msg).toContain("compacted 100.0k → 20.0k tok");
+    expect(msg).toContain("kept ~5.0k tok tail (mid-turn cut, no user anchor)");
+  });
+
+  test("formatCompactionStats is unchanged when no estimate is available", () => {
+    expect(formatCompactionStats(base)).toBe("pi-vcc: kept 1/2 turns, ~5.0k tok (summarized 4).");
+    // tokensBefore alone is not enough to calibrate against
+    expect(formatCompactionStats({ ...base, tokensBefore: 228481 })).toBe("pi-vcc: kept 1/2 turns, ~5.0k tok (summarized 4).");
+    expect(formatCompactionStats({ ...base, postTokensEst: 91583 })).toBe("pi-vcc: kept 1/2 turns, ~5.0k tok (summarized 4).");
+  });
+
+  test("the hook stores postTokensEst in compaction details when a projection exists", () => {
+    setConfig({ debug: false, overrideDefaultCompaction: true });
+    const { pi, invokeBefore, ctx } = createMockPi();
+    registerBeforeCompactHook(pi);
+    (ctx as any).sessionManager = {
+      buildSessionProjection: () => ({ messages: [{ role: "user", content: "x".repeat(4000) }] }),
+    };
+    const entries = [
+      msg("m1", "user", "one"),
+      msg("m2", "assistant", "a"),
+      msg("m3", "user", "two"),
+      msg("m4", "assistant", "b"),
+    ];
+    const result: any = invokeBefore(makeEvent(entries, PI_VCC_COMPACT_INSTRUCTION, {
+      // Provider measured 2000 tokens for a 4000-char projection. The heuristic
+      // alone would say ~1000; the estimate must follow the measurement.
+      preparation: { previousSummary: undefined, fileOps: { read: [], written: [], edited: [] }, tokensBefore: 2000 },
+    }));
+    const est = result.compaction.details.postTokensEst;
+    expect(est).toBeGreaterThan(1500);
+    expect(est).toBeLessThan(2500);
+    unlinkSync(CONFIG_PATH);
+  });
+
+  test("the hook omits postTokensEst when no projection is available", () => {
+    setConfig({ debug: false, overrideDefaultCompaction: true });
+    const { pi, invokeBefore } = createMockPi();
+    registerBeforeCompactHook(pi);
+    const entries = [
+      msg("m1", "user", "one"),
+      msg("m2", "assistant", "a"),
+      msg("m3", "user", "two"),
+      msg("m4", "assistant", "b"),
+    ];
+    const result: any = invokeBefore(makeEvent(entries, PI_VCC_COMPACT_INSTRUCTION));
+    expect(result.compaction.details.postTokensEst).toBeUndefined();
+    unlinkSync(CONFIG_PATH);
+  });
+});
