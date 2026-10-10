@@ -713,6 +713,114 @@ describe("applyTailBudget: token-budget tail cut (default path)", () => {
   });
 });
 
+describe("registerBeforeCompactHook: resolved retention", () => {
+  const growthEntries = (secondTurnTokens = 18_000) => [
+    msg("u1", "user", "go!!"), msg("a1", "assistant", "x".repeat(5_000 * 4)),
+    msg("u2", "user", "go!!"), msg("a2", "assistant", "x".repeat(secondTurnTokens * 4)),
+    msg("u3", "user", "go!!"), msg("a3", "assistant", "x".repeat(3_000 * 4)),
+    msg("u4", "user", "go!!"), msg("a4", "assistant", "x".repeat(1_000 * 4)),
+  ];
+
+  afterEach(() => {
+    if (existsSync(CONFIG_PATH)) unlinkSync(CONFIG_PATH);
+  });
+
+  test("smart growth uses Pi's resolved 20k retention target, not VCC's 25k default", () => {
+    setConfig({ debug: false, overrideDefaultCompaction: true, smartKeepTail: true });
+    const { pi, invokeBefore } = createMockPi();
+    registerBeforeCompactHook(pi);
+    const event = makeEvent(growthEntries());
+    // Known usage fixes calibration at 4 chars/token; keep:3 is 22,003 tokens.
+    event.preparation.tokensBefore = 27_004;
+    event.preparation.settings = { keepRecentTokens: 20_000 };
+    const result = invokeBefore(event);
+    expect(result.compaction.firstKeptEntryId).toBe("u3");
+    expect(getLastCompactionStats()!.keptUserTurns).toBe(2);
+  });
+
+  test("autonomous rescue uses the resolved target and skips a tool-result boundary", () => {
+    setConfig({ debug: false, overrideDefaultCompaction: true });
+    const { pi, invokeBefore } = createMockPi();
+    registerBeforeCompactHook(pi);
+    const entries = [
+      msg("u1", "user", "go!!"),
+      msg("a1", "assistant", "x".repeat(40 * 4)),
+      msg("t1", "toolResult", "x".repeat(30 * 4)),
+      msg("a2", "assistant", "x".repeat(40 * 4)),
+      msg("a3", "assistant", "x".repeat(30 * 4)),
+    ];
+    const event = makeEvent(entries);
+    event.preparation.tokensBefore = 141;
+    event.preparation.settings = { keepRecentTokens: 100 };
+    const result = invokeBefore(event);
+    expect(result.compaction.firstKeptEntryId).toBe("a2");
+    expect(getLastCompactionStats()!.budgetCut).toBe("no_anchor");
+  });
+
+  test("a resolved 30k target permits growth beyond the legacy 25k default", () => {
+    setConfig({ debug: false, overrideDefaultCompaction: true, smartKeepTail: true });
+    const { pi, invokeBefore } = createMockPi();
+    registerBeforeCompactHook(pi);
+    const event = makeEvent(growthEntries(23_000));
+    event.preparation.tokensBefore = 32_004;
+    event.preparation.settings = { keepRecentTokens: 30_000 };
+    expect(invokeBefore(event).compaction.firstKeptEntryId).toBe("u2");
+  });
+
+  test.each([undefined, -1, NaN, Infinity, "20000"])("absent/invalid target %p preserves the legacy fallback", (target) => {
+    setConfig({ debug: false, overrideDefaultCompaction: true, smartKeepTail: true });
+    const { pi, invokeBefore } = createMockPi();
+    registerBeforeCompactHook(pi);
+    const event = makeEvent(growthEntries());
+    event.preparation.tokensBefore = 27_004;
+    if (target !== undefined) event.preparation.settings = { keepRecentTokens: target };
+    expect(invokeBefore(event).compaction.firstKeptEntryId).toBe("u2");
+  });
+
+  test.each([0, 2])("explicit keep:%i is not overridden by a smaller resolved target", (keep) => {
+    setConfig({ debug: false, overrideDefaultCompaction: true, smartKeepTail: true });
+    const { pi, invokeBefore } = createMockPi();
+    registerBeforeCompactHook(pi);
+    const event = makeEvent(growthEntries(), `${PI_VCC_COMPACT_INSTRUCTION} keep:${keep}`);
+    event.preparation.tokensBefore = 27_004;
+    event.preparation.settings = { keepRecentTokens: 10 };
+    expect(invokeBefore(event).compaction.firstKeptEntryId).toBe(keep === 0 ? "" : "u3");
+    expect(getLastCompactionStats()!.budgetCut).toBeUndefined();
+  });
+
+  test("oversized-tail tolerance scales with the resolved target even with smart growth disabled", () => {
+    setConfig({ debug: false, overrideDefaultCompaction: true, smartKeepTail: false });
+    const { pi, invokeBefore } = createMockPi();
+    registerBeforeCompactHook(pi);
+    const entries = [
+      msg("u1", "user", "go!!"), msg("a1", "assistant", "done"),
+      msg("u2", "user", "go!!"),
+      msg("a2", "assistant", "x".repeat(60 * 4)),
+      msg("t1", "toolResult", "x".repeat(60 * 4)),
+      msg("a3", "assistant", "x".repeat(60 * 4)),
+      msg("a4", "assistant", "x".repeat(60 * 4)),
+      msg("a5", "assistant", "x".repeat(30 * 4)),
+    ];
+    const event = makeEvent(entries);
+    event.preparation.tokensBefore = 273;
+    event.preparation.settings = { keepRecentTokens: 100 };
+    expect(invokeBefore(event).compaction.firstKeptEntryId).toBe("a3");
+    expect(getLastCompactionStats()!.budgetCut).toBe("oversized_tail");
+  });
+
+  test("zero is a valid resolved target, not a request for the legacy fallback", () => {
+    setConfig({ debug: false, overrideDefaultCompaction: true });
+    const { pi, invokeBefore } = createMockPi();
+    registerBeforeCompactHook(pi);
+    const entries = [msg("u1", "user", "go!!"), msg("a1", "assistant", "done"), msg("a2", "assistant", "last")];
+    const event = makeEvent(entries);
+    event.preparation.tokensBefore = 3;
+    event.preparation.settings = { keepRecentTokens: 0 };
+    // Like Pi's cut, retain the last indivisible message, not the entire history.
+    expect(invokeBefore(event).compaction.firstKeptEntryId).toBe("a2");
+  });
+});
+
 describe("registerBeforeCompactHook: budget-cut hook integration", () => {
   beforeEach(() => {
     if (existsSync(DEBUG_PATH)) unlinkSync(DEBUG_PATH);

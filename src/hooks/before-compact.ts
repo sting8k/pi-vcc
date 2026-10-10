@@ -482,6 +482,7 @@ export const applyTailBudget = (
 // ── smart keep-tail: boost default keep when tail is small ──
 
 export const MIN_SMART_TAIL_TOKENS = 5_000;
+/** Legacy fallback when a preparation has no usable resolved retention target. */
 export const MAX_SMART_TAIL_TOKENS = 25_000;
 
 export interface ResolveSmartKeepOptions {
@@ -492,7 +493,7 @@ export interface ResolveSmartKeepOptions {
   explicit: boolean;
   /** Setting toggle. */
   smartKeepTail: boolean;
-  /** Injectable thresholds for tests. */
+  /** Estimated-tail bounds; maxTokens receives Pi's resolved retention target. */
   minTokens?: number;
   maxTokens?: number;
   /** Calibrated chars/token for the current session; defaults to heuristic when omitted. */
@@ -622,6 +623,11 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI, piVersion: string = 
       preparation.tokensBefore,
     );
 
+    const retentionTarget = preparation.settings?.keepRecentTokens;
+    const maxTailTokens = typeof retentionTarget === "number" && Number.isFinite(retentionTarget) && retentionTarget >= 0
+      ? retentionTarget
+      : MAX_SMART_TAIL_TOKENS;
+
     // Smart keep-tail: boost default keep when the tail is small.
     // Explicit keep:N from the user is always respected (resolver no-ops).
     const smartKeep = resolveSmartKeepUserTurns({
@@ -629,6 +635,7 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI, piVersion: string = 
       requestedKeepUserTurns: keepUserTurnsExplicit ? keepUserTurns : null,
       explicit: keepUserTurnsExplicit,
       smartKeepTail: settings.smartKeepTail,
+      maxTokens: maxTailTokens,
       charsPerToken: tokenEstimate.charsPerToken,
     });
     let ownCut = buildOwnCut(branchEntries as any[], smartKeep.keepUserTurns, settings.skipCustomTypes);
@@ -636,6 +643,7 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI, piVersion: string = 
     // token-budget cut. Explicit keep:N is respected absolutely (no-op here).
     if (ownCut.ok && !keepUserTurnsExplicit) {
       ownCut = applyTailBudget(branchEntries as any[], ownCut, {
+        maxTokens: maxTailTokens,
         charsPerToken: tokenEstimate.charsPerToken,
         skipCustomTypes: settings.skipCustomTypes,
       });
