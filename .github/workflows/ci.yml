@@ -20,6 +20,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      matrix:
+        pi: [locked, "1.1.0"]
     steps:
       # Actions pinned to commit SHAs so a retagged release cannot swap the
       # code this job runs.
@@ -39,5 +42,12 @@ jobs:
       # --ignore-scripts: dependency postinstall code does not run in CI
       # (verified: suite passes with both postinstalls blocked).
       - run: bun install --frozen-lockfile --ignore-scripts
+
+      # Keep legacy compatibility, and exercise context-edit regressions on a
+      # host exposing canonical projection. Do not alter the tracked manifest.
+      - if: matrix.pi != 'locked'
+        run: |
+          npm install --no-save --ignore-scripts --no-audit --no-fund @earendil-works/pi-coding-agent@${{ matrix.pi }}
+          bun -e "import { VERSION } from '@earendil-works/pi-coding-agent'; if (VERSION !== '${{ matrix.pi }}') throw new Error('Unexpected Pi host version');"
 
       - run: bun test

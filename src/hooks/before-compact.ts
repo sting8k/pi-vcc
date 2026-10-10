@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { convertToLlm, VERSION } from "@earendil-works/pi-coding-agent";
+import * as piCore from "@earendil-works/pi-coding-agent";
 import { writeFileSync } from "fs";
 import { compileRanked } from "../core/summarize";
 import { normalize } from "../core/normalize";
@@ -295,6 +296,19 @@ export type OwnCutResult =
   | { ok: false; reason: OwnCutCancelReason };
 
 const collectLiveMessages = (branchEntries: any[]): EntryWithMessage[] => {
+  if (branchEntries.some((entry) => entry.type === "context_edit")) {
+    // Pi owns edit ordering and compaction visibility. Keep source ids for recall
+    // refs, but use projected messages for summaries, calibration and tail cuts.
+    // Namespace access preserves loading on older supported hosts without this
+    // export. If edited history reaches such a host, defer via the hook error
+    // rather than silently resurrecting omitted/replaced content.
+    const project = (piCore as any).buildSessionProjection;
+    if (typeof project !== "function") throw new Error("Context-edited history requires Pi's buildSessionProjection");
+    return project(branchEntries).entries.flatMap(({ sourceEntry: entry, messages }: any) =>
+      entry.type === "compaction" ? [] : messages.map((message: any) => ({ entry, message })),
+    );
+  }
+
   // Find the last compaction entry and its firstKeptEntryId
   let lastCompactionIdx = -1;
   let lastKeptId: string | undefined;
@@ -641,7 +655,7 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI, piVersion: string = 
       });
     }
     if (!ownCut.ok) {
-      const lastComp = [...branchEntries].reverse().find((e: any) => e.type === "compaction");
+      const lastComp = [...branchEntries].reverse().find((e) => e.type === "compaction");
       const lastCompIdx = lastComp ? (branchEntries as any[]).indexOf(lastComp) : -1;
 
       // Recompute liveMessages view (same logic as buildOwnCut) for diagnostic
