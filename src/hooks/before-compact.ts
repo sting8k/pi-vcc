@@ -641,7 +641,7 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI, piVersion: string = 
       });
     }
     if (!ownCut.ok) {
-      const lastComp = [...branchEntries].reverse().find((e: any) => e.type === "compaction");
+      const lastComp = [...branchEntries].reverse().find((e) => e.type === "compaction");
       const lastCompIdx = lastComp ? (branchEntries as any[]).indexOf(lastComp) : -1;
 
       // Recompute liveMessages view (same logic as buildOwnCut) for diagnostic

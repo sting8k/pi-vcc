@@ -177,6 +177,18 @@ Config lives at `~/.pi/agent/pi-vcc-config.json` and is created with these defau
 - **`skipCustomTypes`** *(default `[]`)*: `customType` values of `custom_message` entries to leave out of the summary, for per-turn boilerplate other extensions inject (skill cards, guidance blocks). Exact, case-sensitive match; look for `"type":"custom_message"` in your session file to find the value. Only the summary input changes, not the cut.
 - **`trackCommands`** *(default `[]`)*: commands to remember across compactions, listed in a `[Tracked Commands]` section. Any command or prefix works: `["ssh", "kubectl", "docker"]`, `["psql", "./deploy.sh"]`, or `"gh pr"` (matches `gh pr merge`, not `gh run`). Each entry is the command as written, up to the next shell separator outside quotes, with any `sudo`/`env`/`VAR=` prefix kept; the 10 most recent per command are kept. Only `bash` calls are read, and only `ssh` remote commands are looked into, not `sh -c` or `docker exec`. Empty = off.
 
+## Development checks
+
+```sh
+bun install --frozen-lockfile --ignore-scripts
+bun run typecheck
+bun test
+```
+
+The source typecheck uses the pinned TypeScript compiler and Node definitions;
+`skipLibCheck` excludes dependency declarations, not VCC source. CI runs both
+checks against the locked legacy Pi host and Pi 1.1.0.
+
 ## Benchmarks
 
 Benchmarks comparing the ranked brief with the 0.3.18 baseline (recall, fact density, precision, size) are in [`benchmarks/README.md`](./benchmarks/README.md).

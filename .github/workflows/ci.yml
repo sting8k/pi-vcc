@@ -20,6 +20,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      matrix:
+        pi: [locked, "1.1.0"]
     steps:
       # Actions pinned to commit SHAs so a retagged release cannot swap the
       # code this job runs.
@@ -33,11 +36,16 @@ jobs:
           # and the test runner drifts independently of this repo.
           bun-version: 1.3.0
 
-      # --frozen-lockfile: reproducible installs (package.json only declares
-      # peerDependencies, so an unpinned resolve would float to the latest pi
-      # release in range and drift from the version under development).
+      # --frozen-lockfile: reproducible host and compiler versions. An unpinned
+      # peer resolve would float to the latest pi release in range.
       # --ignore-scripts: dependency postinstall code does not run in CI
       # (verified: suite passes with both postinstalls blocked).
       - run: bun install --frozen-lockfile --ignore-scripts
 
+      - if: matrix.pi != 'locked'
+        run: |
+          npm install --no-save --ignore-scripts --no-audit --no-fund @earendil-works/pi-coding-agent@${{ matrix.pi }}
+          bun -e "import { VERSION } from '@earendil-works/pi-coding-agent'; if (VERSION !== '${{ matrix.pi }}') throw new Error('Unexpected Pi host version');"
+
+      - run: bun run typecheck
       - run: bun test

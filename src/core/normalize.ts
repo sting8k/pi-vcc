@@ -1,9 +1,9 @@
-import type { Message } from "@earendil-works/pi-ai";
+import type { SessionMessageEntry } from "@earendil-works/pi-coding-agent";
 import type { NormalizedBlock } from "../types";
 import { textOf } from "./content";
 import { sanitize } from "./sanitize";
 
-const normalizeOne = (msg: Message, msgIndex: number | undefined): NormalizedBlock[] => {
+const normalizeOne = (msg: SessionMessageEntry["message"], msgIndex: number | undefined): NormalizedBlock[] => {
   if (msg.role === "user") {
     const blocks: NormalizedBlock[] = [];
     const text = sanitize(textOf(msg.content));
@@ -19,9 +19,9 @@ const normalizeOne = (msg: Message, msgIndex: number | undefined): NormalizedBlo
   }
 
   if (msg.role === "bashExecution") {
-    const cmd = (msg as any).command ?? "";
-    const out = (msg as any).output ?? "";
-    const exit = (msg as any).exitCode;
+    const cmd = msg.command ?? "";
+    const out = msg.output ?? "";
+    const exit = msg.exitCode;
     return [{ kind: "bash", command: cmd, output: out, exitCode: exit, sourceIndex: msgIndex }];
   }
 
@@ -68,7 +68,7 @@ const normalizeOne = (msg: Message, msgIndex: number | undefined): NormalizedBlo
  * index space to map into).
  */
 export const normalize = (
-  messages: Message[],
+  messages: SessionMessageEntry["message"][],
   sourceIndices?: Array<number | undefined>,
 ): NormalizedBlock[] =>
   messages.flatMap((msg, i) => normalizeOne(msg, sourceIndices ? sourceIndices[i] : i));
