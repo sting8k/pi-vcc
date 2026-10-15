@@ -8,4 +8,7 @@ export interface PiVccCompactionDetails {
   previousSummaryUsed: boolean;
   reason?: CompactionReason;
   willRetry?: boolean;
+  /** Estimated context size after this compaction, calibrated to the
+   * provider-measured pre-compaction size. Absent on older entries. */
+  postTokensEst?: number;
 }
