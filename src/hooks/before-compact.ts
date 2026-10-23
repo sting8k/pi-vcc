@@ -578,6 +578,111 @@ export const resolveSmartKeepUserTurns = (opts: ResolveSmartKeepOptions): Resolv
   };
 };
 
+// Ranked compaction: keep the highest-signal blocks under a token budget
+// instead of the old unranked compile() (fixed 120-line cap). The token
+// budget is converted to a char budget via the session's calibrated
+// charsPerToken so the summary targets ~RANKED_BRIEF_BUDGET_TOKENS tokens
+// regardless of content density.
+//
+// The budget is SIZE-RELATIVE: it scales with transcript length between a
+// floor (RANKED_BRIEF_BUDGET_TOKENS) and a ceiling (RANKED_BRIEF_CEILING_TOKENS)
+// at RANKED_BRIEF_CHARS_PER_BLOCK per normalized block. Small/medium sessions
+// stay at the floor (size parity with the old cap); very large transcripts --
+// which carry far more high-value long-tail (edits, commands, tests) than the
+// old 120-line brief could hold -- earn more budget up to the ceiling, while
+// the ceiling keeps growth bounded (no return of the ~60% bloat).
+// Audit (research/audit, 794 sessions, vs shipped master 0.3.18): SMALL/MED
+// unchanged; LARGE bucket paired recall -5.0pp -> -2.3pp (median to parity),
+// long-tail losers 100/369 -> 67/369; fact density stays ~1.4x master.
+const RANKED_BRIEF_BUDGET_TOKENS = 1100;
+const RANKED_BRIEF_CEILING_TOKENS = 2000;
+const RANKED_BRIEF_TOKENS_PER_BLOCK = 15;
+
+export interface VccSummaryInput {
+  /** Agent messages to summarize: cut and skipCustomTypes filtering already applied. */
+  messages: any[];
+  /** Entry id per message, parallel to `messages`; resolves the global `#N` refs. */
+  entryIds: string[];
+  /** Pi's session manager (or a stub); its entries are the `#N` index space. */
+  sessionManager?: { getEntries?: () => any[]; getSessionFile?: () => string | undefined };
+  previousSummary?: string;
+  fileOps: { read: Iterable<string>; written: Iterable<string>; edited: Iterable<string> };
+  charsPerToken: number;
+  settings: PiVccSettings;
+}
+
+/**
+ * The summary pi-vcc writes into a compaction entry. Shared by the
+ * session_before_compact hook and by extensions that append a compaction
+ * entry themselves (e.g. a tool-triggered compaction at a turn boundary), so
+ * both emit the same sections and the same `(#N)` refs that vcc_recall resolves.
+ */
+export const buildVccSummary = (input: VccSummaryInput): { summary: string; convertedMessages: number } => {
+  // ── Session-global indices for summary refs (issue #28) ──────────
+  // Recall numbers messages across the whole session file (all windows,
+  // all branches); the selected window is zero-based. Map each selected
+  // entry id to its global index so emitted (#N) refs resolve via recall.
+  // Primary source is the in-memory tree (file order, synchronously
+  // persisted); the session file is the streaming fallback.
+  let globalIndexById: Map<string, number> | undefined;
+  try {
+    const all = input.sessionManager?.getEntries?.();
+    if (Array.isArray(all)) globalIndexById = buildGlobalIndexById(all);
+  } catch {
+    globalIndexById = undefined;
+  }
+  if (!globalIndexById) {
+    try {
+      const sf = input.sessionManager?.getSessionFile?.();
+      if (typeof sf === "string" && sf) globalIndexById = loadGlobalIndexById(sf);
+    } catch {
+      globalIndexById = undefined;
+    }
+  }
+
+  // convertToLlm is elementwise (drops/replaces per message, order
+  // preserved), so align ids by converting singletons — never by position.
+  const convertedWithIndices: Array<{ message: any; sourceIndex: number | undefined }> = [];
+  for (let i = 0; i < input.messages.length; i++) {
+    const converted = toLlmSafe(input.messages[i]);
+    if (converted.length === 0) continue;
+    // convertToLlm turns an extension's custom_message and a user-run `!cmd`
+    // (bashExecution) into plain user messages. Keep a `!cmd` as it is: the
+    // brief shows it as one `$ cmd (#N)` line (output via vcc_recall), and it
+    // is not read as user text. Mark a custom_message so the early requests
+    // and [User Messages] read only what the user wrote.
+    const role = input.messages[i]?.role;
+    convertedWithIndices.push({
+      message: role === "bashExecution"
+        ? input.messages[i]
+        : role === "custom" ? { ...converted[0], injected: true } : converted[0],
+      sourceIndex: globalIndexById?.get(input.entryIds[i]),
+    });
+  }
+  const messages = convertedWithIndices.map((x) => x.message);
+  // Fail-closed: when no index map exists at all every slot is undefined,
+  // so refs are omitted rather than emitted window-relative (the bug being
+  // fixed). Parallel to `messages` by construction.
+  const sourceIndices = convertedWithIndices.map((x) => x.sourceIndex);
+
+  const summary = compileRanked({
+    messages,
+    sourceIndices,
+    previousSummary: input.previousSummary,
+    fileOps: {
+      readFiles: [...input.fileOps.read],
+      modifiedFiles: [...input.fileOps.written, ...input.fileOps.edited],
+    },
+    trackCommands: input.settings.trackCommands,
+    ranking: {
+      maxBriefChars: Math.round(RANKED_BRIEF_BUDGET_TOKENS * input.charsPerToken),
+      maxBriefCharsCeiling: Math.round(RANKED_BRIEF_CEILING_TOKENS * input.charsPerToken),
+      briefCharsPerBlock: Math.round(RANKED_BRIEF_TOKENS_PER_BLOCK * input.charsPerToken),
+    },
+  });
+  return { summary, convertedMessages: messages.length };
+};
+
 const REASON_MESSAGES: Record<OwnCutCancelReason, string> = {
   no_live_messages: "pi-vcc: Nothing to compact (no live messages)",
   too_few_live_messages: "pi-vcc: Too few messages to compact",
@@ -741,53 +846,6 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI, piVersion: string = 
     }
     const firstKeptEntryId = ownCut.firstKeptEntryId;
 
-    // ── Session-global indices for summary refs (issue #28) ──────────
-    // Recall numbers messages across the whole session file (all windows,
-    // all branches); the selected window is zero-based. Map each selected
-    // entry id to its global index so emitted (#N) refs resolve via recall.
-    // Primary source is the in-memory tree (file order, synchronously
-    // persisted); the session file is the streaming fallback.
-    let globalIndexById: Map<string, number> | undefined;
-    try {
-      const all = (ctx as any)?.sessionManager?.getEntries?.();
-      if (Array.isArray(all)) globalIndexById = buildGlobalIndexById(all);
-    } catch {
-      globalIndexById = undefined;
-    }
-    if (!globalIndexById) {
-      try {
-        const sf = (ctx as any)?.sessionManager?.getSessionFile?.();
-        if (typeof sf === "string" && sf) globalIndexById = loadGlobalIndexById(sf);
-      } catch {
-        globalIndexById = undefined;
-      }
-    }
-
-    // convertToLlm is elementwise (drops/replaces per message, order
-    // preserved), so align ids by converting singletons — never by position.
-    const convertedWithIndices: Array<{ message: any; sourceIndex: number | undefined }> = [];
-    for (let i = 0; i < agentMessages.length; i++) {
-      const converted = toLlmSafe(agentMessages[i]);
-      if (converted.length === 0) continue;
-      // convertToLlm turns an extension's custom_message and a user-run `!cmd`
-      // (bashExecution) into plain user messages. Keep a `!cmd` as it is: the
-      // brief shows it as one `$ cmd (#N)` line (output via vcc_recall), and it
-      // is not read as user text. Mark a custom_message so the early requests
-      // and [User Messages] read only what the user wrote.
-      const role = agentMessages[i]?.role;
-      convertedWithIndices.push({
-        message: role === "bashExecution"
-          ? agentMessages[i]
-          : role === "custom" ? { ...converted[0], injected: true } : converted[0],
-        sourceIndex: globalIndexById?.get(agentSelectedIds[i]),
-      });
-    }
-    const messages = convertedWithIndices.map((x) => x.message);
-    // Fail-closed: when no index map exists at all every slot is undefined,
-    // so refs are omitted rather than emitted window-relative (the bug being
-    // fixed). Parallel to `messages` by construction.
-    const sourceIndices = convertedWithIndices.map((x) => x.sourceIndex);
-
     // Count kept messages and estimate tokens
     const keptIdx = (branchEntries as any[]).findIndex((e: any) => e.id === firstKeptEntryId);
     const keptEntries = keptIdx >= 0
@@ -815,39 +873,14 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI, piVersion: string = 
 
     const config = settings;
 
-    // Ranked compaction: keep the highest-signal blocks under a token budget
-    // instead of the old unranked compile() (fixed 120-line cap). The token
-    // budget is converted to a char budget via the session's calibrated
-    // charsPerToken so the summary targets ~RANKED_BRIEF_BUDGET_TOKENS tokens
-    // regardless of content density.
-    //
-    // The budget is SIZE-RELATIVE: it scales with transcript length between a
-    // floor (RANKED_BRIEF_BUDGET_TOKENS) and a ceiling (RANKED_BRIEF_CEILING_TOKENS)
-    // at RANKED_BRIEF_CHARS_PER_BLOCK per normalized block. Small/medium sessions
-    // stay at the floor (size parity with the old cap); very large transcripts --
-    // which carry far more high-value long-tail (edits, commands, tests) than the
-    // old 120-line brief could hold -- earn more budget up to the ceiling, while
-    // the ceiling keeps growth bounded (no return of the ~60% bloat).
-    // Audit (research/audit, 794 sessions, vs shipped master 0.3.18): SMALL/MED
-    // unchanged; LARGE bucket paired recall -5.0pp -> -2.3pp (median to parity),
-    // long-tail losers 100/369 -> 67/369; fact density stays ~1.4x master.
-    const RANKED_BRIEF_BUDGET_TOKENS = 1100;
-    const RANKED_BRIEF_CEILING_TOKENS = 2000;
-    const RANKED_BRIEF_TOKENS_PER_BLOCK = 15;
-    const summary = compileRanked({
-      messages,
-      sourceIndices,
+    const { summary, convertedMessages } = buildVccSummary({
+      messages: agentMessages,
+      entryIds: agentSelectedIds,
+      sessionManager: (ctx as any)?.sessionManager,
       previousSummary: preparation.previousSummary,
-      fileOps: {
-        readFiles: [...preparation.fileOps.read],
-        modifiedFiles: [...preparation.fileOps.written, ...preparation.fileOps.edited],
-      },
-      trackCommands: settings.trackCommands,
-      ranking: {
-        maxBriefChars: Math.round(RANKED_BRIEF_BUDGET_TOKENS * tokenEstimate.charsPerToken),
-        maxBriefCharsCeiling: Math.round(RANKED_BRIEF_CEILING_TOKENS * tokenEstimate.charsPerToken),
-        briefCharsPerBlock: Math.round(RANKED_BRIEF_TOKENS_PER_BLOCK * tokenEstimate.charsPerToken),
-      },
+      fileOps: preparation.fileOps,
+      charsPerToken: tokenEstimate.charsPerToken,
+      settings,
     });
 
     const branchIds = branchEntries.map((e: any) => e.id);
@@ -868,7 +901,7 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI, piVersion: string = 
       messagesToSummarize: agentMessages.length,
       messagesPreviewHead: agentMessages.slice(0, 3).map((m: any) => ({ role: m.role, preview: previewContent(m.content) })),
       messagesPreviewTail: agentMessages.slice(-3).map((m: any) => ({ role: m.role, preview: previewContent(m.content) })),
-      convertedMessages: messages.length,
+      convertedMessages,
       firstKeptEntryId,
       cutWindow,
       tokensBefore: preparation.tokensBefore,
