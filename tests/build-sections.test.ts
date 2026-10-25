@@ -5,7 +5,6 @@ import type { NormalizedBlock } from "../src/types";
 describe("buildSections", () => {
   it("returns all-empty for no blocks", () => {
     const r = buildSections({ blocks: [] });
-    expect(r.earlyRequests).toEqual([]);
     expect(r.userMessages).toEqual([]);
     expect(r.briefTranscript).toBe("");
     expect(r.trackedCommands).toEqual([]);
@@ -37,13 +36,13 @@ describe("buildSections", () => {
       { kind: "assistant", text: "- run tests next" },
     ];
     const r = buildSections({ blocks });
-    expect(r.earlyRequests).toContain("Fix the auth bug");
+    expect(r.userMessages).toContain("Fix the auth bug");
     expect(r.briefTranscript).toContain('[user]');
     expect(r.briefTranscript).toContain('* Read "auth.ts"');
     expect(r.briefTranscript).toContain('* Edit "auth.ts"');
   });
 
-  it("takes early requests and user messages by position, not by wording", () => {
+  it("takes user messages by position, not by wording", () => {
     const blocks: NormalizedBlock[] = [
       { kind: "user", text: "改成用 JWT 而不是 session cookie" },
       { kind: "user", text: "second request here" },
@@ -55,10 +54,12 @@ describe("buildSections", () => {
       { kind: "user", text: '<peer_message from="x">relayed by a tool</peer_message>' },
     ];
     const r = buildSections({ blocks });
-    expect(r.earlyRequests).toEqual(["改成用 JWT 而不是 session cookie", "second request here", "third request here"]);
-    expect(r.userMessages).toEqual(["[skill: tdd] write the failing test first"]);
-    // Early requests already pinned by the previous summary: the first messages are ordinary.
-    expect(buildSections({ blocks, hasEarlyRequests: true }).userMessages[0]).toBe("改成用 JWT 而不是 session cookie");
+    expect(r.userMessages).toEqual([
+      "改成用 JWT 而不是 session cookie",
+      "second request here",
+      "third request here",
+      "[skill: tdd] write the failing test first",
+    ]);
   });
 
   it("brief transcript hides tool results", () => {

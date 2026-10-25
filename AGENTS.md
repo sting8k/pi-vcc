@@ -25,7 +25,7 @@ Without the matching `pi-codemode`, older Pi releases pick up a newer one they c
 - `index.ts`: registers everything below.
 - `src/hooks/before-compact.ts`: the compaction hook: which messages are live, where to cut, smart keep-tail.
 - `src/core/`: summary pipeline (`normalize` → `filter-noise` → `build-sections` → `brief`/`rank` → `format`, driven by `summarize.ts`), recall (`recall-request.ts` parses the call, `recall-run.ts` runs it, `search-entries.ts` ranks), settings.
-- `src/extract/`: one module per summary section (user messages and early requests, files, commits, tracked commands).
+- `src/extract/`: one module per summary section (user messages, files, commits, tracked commands).
 - `src/commands/`, `src/tools/recall.ts`: `/pi-vcc`, `/pi-vcc-recall` and the `vcc_recall` tool.
 
 ## Rules

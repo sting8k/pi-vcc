@@ -24,20 +24,20 @@ describe("compile", () => {
         assistantText("Found the issue.\n1. Fix validation"),
       ],
     });
-    expect(r).toContain("[Early Session Requests]");
-    expect(r).toContain("Fix login bug");
+    expect(r).toContain("[User Messages]\n- Fix login bug");
     expect(r).toContain("---");
     expect(r).toContain("[user]\nFix login bug");
     expect(r).toContain('* Read "auth.ts"');
     expect(r).toContain("Found the issue.");
   });
 
-  it("keeps the early requests and lists later requests as user messages", () => {
+  it("drops early requests from an older version; new requests are user messages", () => {
     const r = compile({
       messages: [userMsg("New task")],
       previousSummary: "[Early Session Requests]\n- Original goal\n\n---\n\n[user]\nOriginal goal",
     });
-    expect(r).toContain("[Early Session Requests]\n- Original goal\n\n[User Messages]\n- New task\n");
+    expect(r.startsWith("[User Messages]\n- New task\n")).toBe(true);
+    expect(r).not.toContain("[Early Session Requests]");
   });
 
   it("appends brief transcript on merge", () => {
@@ -67,7 +67,7 @@ describe("compile", () => {
     ].join("\n\n") + "\n\n---\n\n[user]\nhi";
     const r = compile({ previousSummary, messages: [userMsg("continue please")] });
     expect(r.slice(0, r.indexOf("\n\n---\n\n"))).toBe(
-      "[Early Session Requests]\n- Original goal\n\n[Commits]\n- abc1234: first\n\n[User Messages]\n- continue please",
+      "[Commits]\n- abc1234: first\n\n[User Messages]\n- continue please",
     );
   });
 
@@ -79,7 +79,7 @@ describe("compile", () => {
     expect(items).toHaveLength(15);
     expect(items[0]).toBe("- step number 6");
     expect(items.at(-1)).toBe("- step number 10");
-    expect(summary).toContain("[Early Session Requests]\n- the first goal\n");
+    expect(items).not.toContain("- the first goal"); // rolled out like any other message
   });
 
   it("caps long brief transcript with rolling window", () => {
@@ -121,13 +121,13 @@ describe("compile merge of wrapped header sections", () => {
     for (let i = 0; i < 8; i++) expect(files).toContain(`implementation-${i}.ts`);
   });
 
-  it("keeps the tail of a wrapped early request", () => {
+  it("keeps the tail of a wrapped user message", () => {
     const goal =
       "Please migrate the billing service from the legacy cron scheduler to the new queue workers and keep the retry semantics identical for failed invoices";
     const first = compile({ messages: [userMsg(goal)] });
-    expect(first).toMatch(/\[Early Session Requests\]\n.*\n  \S/); // really wrapped
+    expect(first).toMatch(/\[User Messages\]\n.*\n  \S/); // really wrapped
     const r = compile({ previousSummary: first, messages: [userMsg("also update the README for the queue workers")] });
-    expect(sectionOf(r, "Early Session Requests")).toContain(goal);
+    expect(sectionOf(r, "User Messages")).toContain(goal);
   });
 
   it("keeps wrapped items of the new turn", () => {
