@@ -66,7 +66,7 @@ export const PI_SELF_RESUME_VERSION: readonly [number, number, number] = [0, 84,
  * Prerelease/build suffixes are dropped, so 0.84.4-rc.1 counts as 0.84.4 - the
  * safe direction, since such a build already carries the self-resume behaviour.
  */
-const parseVersionCore = (version: unknown): [number, number, number] | null => {
+export const parseVersionCore = (version: unknown): [number, number, number] | null => {
   if (typeof version !== "string") return null;
   const m = /^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(version.trim());
   if (!m) return null;

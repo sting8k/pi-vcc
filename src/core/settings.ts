@@ -61,6 +61,17 @@ export interface PiVccSettings {
    */
   skipCustomTypes: string[];
   /**
+   * Register a compact_context tool the model can call to compact the
+   * conversation itself at the end of the current turn, using pi-vcc's own
+   * summary builder (same sections and (#N) refs as automatic compaction;
+   * vcc_recall resolves them). The cut keeps the newest
+   * ~compaction.keepRecentTokens at a safe boundary. Off by default;
+   * needs Pi >= 0.87.0 (actionable turn_end) — on older hosts the tool is
+   * not registered and automatic compaction alone applies. Auto-compaction
+   * is untouched either way.
+   */
+  agentCompact: boolean;
+  /**
    * Commands whose bash invocations are kept in a "[Tracked Commands]" section,
    * e.g. `["ssh", "kubectl"]`, `["psql"]`, or a prefix like `"gh pr"`. Each
    * entry is the command as written up to the next unquoted separator
@@ -76,6 +87,7 @@ export const DEFAULT_SETTINGS: PiVccSettings = {
   smartKeepTail: true,
   continueAfterThresholdCompact: true,
   debug: false,
+  agentCompact: false,
   skipForProviders: [],
   skipCustomTypes: [],
   trackCommands: [],
