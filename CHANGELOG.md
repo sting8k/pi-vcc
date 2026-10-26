@@ -4,6 +4,10 @@ All notable changes to `@sting8k/pi-vcc` are documented in this file.
 
 ## [Unreleased]
 
+### Changes
+
+- **`buildVccSummary` is exported** — an extension that appends its own compaction entry (e.g. a tool-triggered compaction at a turn boundary) can now build the exact summary the hook writes: same sections, same session-global `(#N)` refs that `vcc_recall` resolves, same ranked brief. No behavior change to auto-compaction.
+
 ## [0.11.1]
 
 ### Fixes
