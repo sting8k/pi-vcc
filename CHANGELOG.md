@@ -4,6 +4,11 @@ All notable changes to `@sting8k/pi-vcc` are documented in this file.
 
 ## [Unreleased]
 
+### Changes
+
+- **`buildVccSummary` is exported** — an extension that appends its own compaction entry (e.g. a tool-triggered compaction at a turn boundary) can now build the exact summary the hook writes: same sections, same session-global `(#N)` refs that `vcc_recall` resolves, same ranked brief. No behavior change to auto-compaction.
+- **`compact_context`: the model can compact on demand** — new `agentCompact` setting (off by default) registers a tool the agent calls when a phase of work is done. At the end of that turn everything older than the recent tail (`compaction.keepRecentTokens`) is replaced by pi-vcc's own summary at a safe boundary and the run continues; `vcc_recall` reads it back. Needs Pi >= 0.87.0 (actionable `turn_end`); automatic compaction is untouched.
+
 ## [0.11.1]
 
 ### Fixes
