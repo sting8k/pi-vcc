@@ -1,6 +1,6 @@
 # pi-vcc
 
-[![npm](https://img.shields.io/npm/v/@sting8k/pi-vcc)](https://www.npmjs.com/package/@sting8k/pi-vcc)
+[![npm](https://img.shields.io/npm/v/@sting8k/pi-vcc)](https://www.npmjs.com/package/@sting8k/pi-vcc) [![omp status](https://omppackages.com/badge/@sting8k/pi-vcc.svg)](https://omppackages.com/packages/@sting8k/pi-vcc)
 
 Algorithmic conversation compactor for [Pi](https://github.com/badlogic/pi-mono). No LLM calls: it builds the summary by extraction and formatting.
 
