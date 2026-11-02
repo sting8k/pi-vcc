@@ -7,7 +7,7 @@ import { normalize } from "../core/normalize";
 import { buildGlobalIndexById, loadGlobalIndexById } from "../core/global-indices";
 import { parseKeepAndPrompt, PI_VCC_COMPACT_INSTRUCTION } from "../core/compact-args";
 import { loadSettings, type PiVccSettings } from "../core/settings";
-import { calibrateCharsPerToken, estimateMessageContentChars, estimateMessageContentTokens, estimateTokensFromChars } from "../core/token-estimate";
+import { calibrateCharsPerToken, estimateMessageContentChars, estimateMessageContentTokens, estimatePostCompactionTokens, estimateTokensFromChars } from "../core/token-estimate";
 import type { PiVccCompactionDetails } from "../details";
 import type { CompactionReason } from "../types";
 
@@ -24,6 +24,10 @@ export interface CompactionStats {
   /** Set when the tail came from a token-budget cut instead of a user-turn cut. */
   budgetCut?: BudgetCutKind;
   keptTokensEst: number;
+  /** Provider-measured context size just before this compaction. */
+  tokensBefore?: number;
+  /** Estimated context size after this compaction, calibrated to tokensBefore. */
+  postTokensEst?: number;
   /** True when smart-keep boosted the default keep beyond 1. */
   smartKeepAdjusted?: boolean;
   /** Base keep before smart adjustment (for toast like "1→3"). */
@@ -132,15 +136,20 @@ const formatTokens = (n: number): string => {
 };
 
 export const formatCompactionStats = (stats: CompactionStats): string => {
+  // Lead with the context transition when the provider gave us a size to
+  // calibrate against. Without it, the previous wording is unchanged.
+  const context = stats.postTokensEst !== undefined && stats.tokensBefore
+    ? `compacted ${formatTokens(stats.tokensBefore)} → ${formatTokens(stats.postTokensEst)} tok; `
+    : "";
   if (stats.budgetCut) {
     const reason = stats.budgetCut === "no_anchor" ? "no user anchor" : "oversized tail";
-    return `pi-vcc: kept ~${formatTokens(stats.keptTokensEst)} tok tail (mid-turn cut, ${reason}), summarized ${stats.summarized}.`;
+    return `pi-vcc: ${context}kept ~${formatTokens(stats.keptTokensEst)} tok tail (mid-turn cut, ${reason}), summarized ${stats.summarized}.`;
   }
   const notes: string[] = [`summarized ${stats.summarized}`];
   if (stats.smartKeepAdjusted) {
     notes.push("smart-keep");
   }
-  return `pi-vcc: kept ${stats.keptUserTurns}/${stats.totalUserTurns} turns, ~${formatTokens(stats.keptTokensEst)} tok (${notes.join(", ")}).`;
+  return `pi-vcc: ${context}kept ${stats.keptUserTurns}/${stats.totalUserTurns} turns, ~${formatTokens(stats.keptTokensEst)} tok (${notes.join(", ")}).`;
 };
 
 const readCompactionEventContext = (event: unknown): { reason?: CompactionReason; willRetry: boolean } => {
@@ -806,6 +815,7 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI, piVersion: string = 
       keepUserTurnsExplicit,
       keepFallbackToCompactAll: ownCut.keepFallbackToCompactAll,
       keptTokensEst: estimateTokensFromChars(keptChars, tokenEstimate.charsPerToken),
+      tokensBefore: preparation.tokensBefore,
       smartKeepAdjusted: smartKeep.smartAdjusted,
       smartFromKeep: smartKeep.fromKeep,
       budgetCut: ownCut.ok ? ownCut.budgetCut : undefined,
@@ -850,6 +860,18 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI, piVersion: string = 
       },
     });
 
+    // Context size after this compaction, calibrated against the provider's own
+    // measurement of the pre-compaction context. Reported so the toast says what
+    // the compaction actually bought, not just how big the tail is.
+    const projection = (ctx as any)?.sessionManager?.buildSessionProjection?.()?.messages ?? [];
+    const postTokensEst = estimatePostCompactionTokens({
+      projection,
+      removed: agentMessages,
+      summaryChars: summary.length,
+      tokensBefore: preparation.tokensBefore,
+    });
+    if (lastStats) lastStats.postTokensEst = postTokensEst;
+
     const branchIds = branchEntries.map((e: any) => e.id);
     const cutIdx = branchIds.indexOf(firstKeptEntryId);
     const cutWindow = cutIdx >= 0
@@ -888,6 +910,7 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI, piVersion: string = 
       previousSummaryUsed: Boolean(preparation.previousSummary),
       reason,
       willRetry,
+      postTokensEst,
     };
 
     lastCompactWasPiVcc = isPiVcc;
