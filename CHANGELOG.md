@@ -8,6 +8,12 @@ All notable changes to `@sting8k/pi-vcc` are documented in this file.
 
 - **`buildVccSummary` is exported** — an extension that appends its own compaction entry (e.g. a tool-triggered compaction at a turn boundary) can now build the exact summary the hook writes: same sections, same session-global `(#N)` refs that `vcc_recall` resolves, same ranked brief. No behavior change to auto-compaction.
 - **`compact_context`: the model can compact on demand** — new `agentCompact` setting (off by default) registers a tool the agent calls when a phase of work is done. At the end of that turn everything older than the recent tail (`compaction.keepRecentTokens`) is replaced by pi-vcc's own summary at a safe boundary and the run continues; `vcc_recall` reads it back. Needs Pi >= 0.87.0 (actionable `turn_end`); automatic compaction is untouched.
+## [0.11.2]
+
+### Fixes
+
+- **One `vcc_recall` result can no longer flood the context** — a search snippet kept whole lines, so a tool result that was one 2 MB line of base64 (an image) came back in full, and the next request went over the model's limit. Snippet lines are now cut to 300 chars around the match, and every recall result is capped at 50 KB. A clipped result starts with a warning saying how much was cut. `expand` of an entry bigger than that shows its first 50 KB (#63)
+- **Encoded data no longer matches search terms** — terms match as substrings, so a short term such as `max` hit hundreds of times inside a base64 image, and the whole line counted as one word, so that entry ranked on page 1. Search now skips runs of 1000+ base64 characters that mix digits and both cases, as search engines drop overlong tokens; the rest of the entry is still searched. Joined identifiers, hex and shorter tokens such as keys stay searchable (#63)
 
 ## [0.11.1]
 
