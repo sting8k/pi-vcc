@@ -26,7 +26,7 @@ export const registerRecallTool = (pi: ExtensionAPI) => {
       "Pick one per call:",
       "- query: keyword search (regex works), 5 results per page.",
       "- range: [from, to]: entries #from..#to in order, 20 per page.",
-      "- expand: [N, ...]: full untruncated text of those entries.",
+      "- expand: [N, ...]: full text of those entries.",
       "- mode: 'touched': files worked on, with entry indices.",
       "- query '#N:path': file content from entry N ('#N:path:full' for all lines).",
       "",
@@ -36,7 +36,7 @@ export const registerRecallTool = (pi: ExtensionAPI) => {
       "  reads edited or retried branches.",
       "",
       "#N is the number shown in summary refs like (#12) and in recall results.",
-      "Only the current session is searchable.",
+      "Only the current session is searchable. One result is capped at 50 KB.",
     ].join("\n"),
     promptSnippet:
       "Recall earlier parts of this session before saying the context is gone. " +
@@ -54,7 +54,7 @@ export const registerRecallTool = (pi: ExtensionAPI) => {
         }),
       ),
       expand: Type.Optional(
-        Type.Array(Type.Number(), { description: "#N indices to return full untruncated content for (from summary refs like (#12) or recall results)." }),
+        Type.Array(Type.Number(), { description: "#N indices to return full content for (from summary refs like (#12) or recall results)." }),
       ),
       page: Type.Optional(
         Type.Number({ description: "Page number (1-based) for query, range or touched results. Default: 1." }),
