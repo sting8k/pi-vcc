@@ -54,6 +54,8 @@ pi-vcc runs automatically when your context window fills up, or on demand:
 
 With the default `keep:1`, a small tail is grown automatically (see `smartKeepTail`). To leave `/compact` and automatic compactions to Pi core, set `overrideDefaultCompaction: false`.
 
+Set `summarizeBranches: true` to use VCC when you select **Summarize** while switching branches in `/tree`. Pi requires a selected model to start summarization. **Summarize with custom prompt** uses that model.
+
 On a short session `/pi-vcc` can answer "Nothing to compact yet" whatever `keep:N` says: Pi stops before any extension runs while the whole session still fits in the recent part it always keeps (`compaction.keepRecentTokens` in Pi's settings).
 
 ### Compacted message structure
@@ -155,6 +157,7 @@ Config lives at `pi-vcc-config.json` in Pi's agent directory (`~/.pi/agent`, or 
 ```json
 {
   "overrideDefaultCompaction": true,
+  "summarizeBranches": false,
   "smartKeepTail": true,
   "continueAfterThresholdCompact": true,
   "debug": false,
@@ -165,6 +168,7 @@ Config lives at `pi-vcc-config.json` in Pi's agent directory (`~/.pi/agent`, or 
 ```
 
 - **`overrideDefaultCompaction`** *(default `true`)*: pi-vcc handles `/pi-vcc`, `/compact` and automatic compactions. With `false` it only handles `/pi-vcc`. Existing config files keep their value.
+- **`summarizeBranches`** *(default `false`)* enables algorithmic branch summaries for the plain **Summarize** choice in `/tree`.
 - **`smartKeepTail`** *(default `true`)*: if the `keep:1` tail is under 5k tokens, keep as many turns as fit in 25k. This is pi-vcc's own limit; Pi's `compaction.keepRecentTokens` does not change it. An explicit `keep:N` is always respected.
 - **`continueAfterThresholdCompact`** *(default `true`)*: after an automatic compaction, tell the agent to carry on instead of stopping. Only used on pi < 0.84.4; newer pi resumes on its own. `false` turns it off everywhere.
 - **`debug`** *(default `false`)*: write details of each compaction (message counts, cut, sections, token calibration) to `/tmp/pi-vcc-debug.json`.

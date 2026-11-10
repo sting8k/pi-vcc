@@ -1,10 +1,11 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { convertToLlm, VERSION } from "@earendil-works/pi-coding-agent";
+import { VERSION } from "@earendil-works/pi-coding-agent";
 import * as piCore from "@earendil-works/pi-coding-agent";
 import { writeFileSync } from "fs";
 import { compileRanked } from "../core/summarize";
 import { normalize } from "../core/normalize";
-import { buildGlobalIndexById, loadGlobalIndexById } from "../core/global-indices";
+import { getSessionGlobalIndexById } from "../core/global-indices";
+import { isSkippedCustom, toLiveMessage, toLlmSafe, toSummaryMessage } from "../core/summary-messages";
 import { parseKeepAndPrompt, PI_VCC_COMPACT_INSTRUCTION } from "../core/compact-args";
 import { loadSettings, type PiVccSettings } from "../core/settings";
 import { calibrateCharsPerToken, estimateMessageContentChars, estimateMessageContentTokens, estimateTokensFromChars } from "../core/token-estimate";
@@ -225,20 +226,6 @@ interface EntryWithMessage {
   message: { role: string; content: unknown };
 }
 
-/** convertToLlm for one message, as the summarizer input path runs it: a message
- * it rejects or drops yields []. */
-const toLlmSafe = (message: unknown): any[] => {
-  try {
-    return convertToLlm([message as any]);
-  } catch {
-    return [];
-  }
-};
-
-/** A custom_message the user listed in skipCustomTypes; dropped before summarizing. */
-const isSkippedCustom = (m: any, skipCustomTypes: readonly string[]): boolean =>
-  m?.role === "custom" && skipCustomTypes.includes(m?.customType);
-
 /** True when the prefix would contribute at least one block to the summary.
  * Runs the same path as the summarizer (skipCustomTypes filter, convertToLlm,
  * normalize): custom_message and branch_summary become user content and render,
@@ -247,33 +234,6 @@ const prefixHasRenderableContent = (prefix: EntryWithMessage[], skipCustomTypes:
   normalize(
     prefix.filter((m) => !isSkippedCustom(m.message, skipCustomTypes)).flatMap((m) => toLlmSafe(m.message)),
   ).length > 0;
-
-// Convert a non-message entry that carries LLM-context text (custom_message /
-// branch_summary) into its agent-message form, mirroring pi-core's
-// createCustomMessage / createBranchSummaryMessage (not root-exported, so inlined).
-const toLiveMessage = (entry: any): { role: string; content: unknown; [key: string]: unknown } | null => {
-  if (entry.type === "message" && entry.message) return entry.message;
-  if (entry.type === "custom_message") {
-    return {
-      role: "custom",
-      customType: entry.customType,
-      content: entry.content,
-      display: entry.display,
-      details: entry.details,
-      timestamp: entry.timestamp != null ? new Date(entry.timestamp).getTime() : undefined,
-    };
-  }
-  if (entry.type === "branch_summary") {
-    return {
-      role: "branchSummary",
-      summary: entry.summary,
-      fromId: entry.fromId,
-      content: undefined,
-      timestamp: entry.timestamp != null ? new Date(entry.timestamp).getTime() : undefined,
-    };
-  }
-  return null;
-};
 
 export type OwnCutCancelReason =
   | "no_live_messages"
@@ -741,51 +701,15 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI, piVersion: string = 
     }
     const firstKeptEntryId = ownCut.firstKeptEntryId;
 
-    // ── Session-global indices for summary refs (issue #28) ──────────
-    // Recall numbers messages across the whole session file (all windows,
-    // all branches); the selected window is zero-based. Map each selected
-    // entry id to its global index so emitted (#N) refs resolve via recall.
-    // Primary source is the in-memory tree (file order, synchronously
-    // persisted); the session file is the streaming fallback.
-    let globalIndexById: Map<string, number> | undefined;
-    try {
-      const all = (ctx as any)?.sessionManager?.getEntries?.();
-      if (Array.isArray(all)) globalIndexById = buildGlobalIndexById(all);
-    } catch {
-      globalIndexById = undefined;
-    }
-    if (!globalIndexById) {
-      try {
-        const sf = (ctx as any)?.sessionManager?.getSessionFile?.();
-        if (typeof sf === "string" && sf) globalIndexById = loadGlobalIndexById(sf);
-      } catch {
-        globalIndexById = undefined;
-      }
-    }
-
-    // convertToLlm is elementwise (drops/replaces per message, order
-    // preserved), so align ids by converting singletons — never by position.
+    // Recall indexes the entire session, so a message without a known global
+    // index must not fall back to its position in this summary's window.
+    const globalIndexById = getSessionGlobalIndexById(ctx?.sessionManager);
     const convertedWithIndices: Array<{ message: any; sourceIndex: number | undefined }> = [];
     for (let i = 0; i < agentMessages.length; i++) {
-      const converted = toLlmSafe(agentMessages[i]);
-      if (converted.length === 0) continue;
-      // convertToLlm turns an extension's custom_message and a user-run `!cmd`
-      // (bashExecution) into plain user messages. Keep a `!cmd` as it is: the
-      // brief shows it as one `$ cmd (#N)` line (output via vcc_recall), and it
-      // is not read as user text. Mark a custom_message so the early requests
-      // and [User Messages] read only what the user wrote.
-      const role = agentMessages[i]?.role;
-      convertedWithIndices.push({
-        message: role === "bashExecution"
-          ? agentMessages[i]
-          : role === "custom" ? { ...converted[0], injected: true } : converted[0],
-        sourceIndex: globalIndexById?.get(agentSelectedIds[i]),
-      });
+      const message = toSummaryMessage(agentMessages[i]);
+      if (message) convertedWithIndices.push({ message, sourceIndex: globalIndexById?.get(agentSelectedIds[i]) });
     }
     const messages = convertedWithIndices.map((x) => x.message);
-    // Fail-closed: when no index map exists at all every slot is undefined,
-    // so refs are omitted rather than emitted window-relative (the bug being
-    // fixed). Parallel to `messages` by construction.
     const sourceIndices = convertedWithIndices.map((x) => x.sourceIndex);
 
     // Count kept messages and estimate tokens
