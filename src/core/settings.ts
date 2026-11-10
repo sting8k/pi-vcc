@@ -20,6 +20,8 @@ export interface PiVccSettings {
    * stored value; the new default applies to fresh installs only.
    */
   overrideDefaultCompaction: boolean;
+  /** Use VCC for plain /tree summaries when the user chooses Summarize. */
+  summarizeBranches: boolean;
   /**
    * When true (default), pi-vcc boosts the default keep-tail when the current
    * keep:1 tail is small enough. Specifically: if the estimated tail for keep:1
@@ -73,6 +75,7 @@ export interface PiVccSettings {
 
 export const DEFAULT_SETTINGS: PiVccSettings = {
   overrideDefaultCompaction: true,
+  summarizeBranches: false,
   smartKeepTail: true,
   continueAfterThresholdCompact: true,
   debug: false,

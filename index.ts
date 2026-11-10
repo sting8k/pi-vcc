@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { scaffoldSettings } from "./src/core/settings";
 import { registerBeforeCompactHook } from "./src/hooks/before-compact";
+import { registerBeforeTreeHook } from "./src/hooks/before-tree";
 import { registerPiVccCommand } from "./src/commands/pi-vcc";
 import { registerVccRecallCommand } from "./src/commands/vcc-recall";
 import { registerRecallTool } from "./src/tools/recall";
@@ -8,6 +9,7 @@ import { registerRecallTool } from "./src/tools/recall";
 export default (pi: ExtensionAPI) => {
   scaffoldSettings();
   registerBeforeCompactHook(pi);
+  registerBeforeTreeHook(pi);
   registerPiVccCommand(pi);
   registerVccRecallCommand(pi);
   registerRecallTool(pi);

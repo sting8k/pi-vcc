@@ -12,6 +12,7 @@
  * sessions stay within PR #26's memory bounds.
  */
 import { forEachJsonlLine } from "./jsonl";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 /** Entries counted by the global `#N` index: persisted message entries. */
 export const isCountedMessageEntry = (entry: any): boolean =>
@@ -78,4 +79,18 @@ export const loadGlobalIndexById = (sessionFile: string): Map<string, number> | 
     return undefined;
   }
   return ok ? b.map() : undefined;
+};
+
+/** Prefer the in-memory tree, which is in the same order as the session file. */
+export const getSessionGlobalIndexById = (
+  sessionManager: ExtensionContext["sessionManager"] | undefined,
+): Map<string, number> | undefined => {
+  try {
+    const entries = sessionManager?.getEntries?.();
+    if (Array.isArray(entries)) return buildGlobalIndexById(entries);
+  } catch {}
+  try {
+    const file = sessionManager?.getSessionFile?.();
+    if (typeof file === "string" && file) return loadGlobalIndexById(file);
+  } catch {}
 };

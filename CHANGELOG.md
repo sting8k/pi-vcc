@@ -4,6 +4,10 @@ All notable changes to `@sting8k/pi-vcc` are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Opt-in VCC branch summaries** — set `summarizeBranches: true` to use the VCC algorithm for the plain **Summarize** choice in `/tree`. (#36)
+
 ## [0.11.2]
 
 ### Fixes
