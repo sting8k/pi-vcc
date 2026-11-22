@@ -4,6 +4,10 @@ All notable changes to `@sting8k/pi-vcc` are documented in this file.
 
 ## [Unreleased]
 
+### Features
+
+- **VCC branch summaries** — the plain **Summarize** choice in `/tree` now uses the VCC algorithm, with no model call. Set `summarizeBranches: false` to keep Pi's model summary. (#36)
+
 ## [0.11.2]
 
 ### Fixes
