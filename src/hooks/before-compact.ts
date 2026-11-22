@@ -255,7 +255,7 @@ export type OwnCutResult =
     }
   | { ok: false; reason: OwnCutCancelReason };
 
-const collectLiveMessages = (branchEntries: any[]): EntryWithMessage[] => {
+export const collectLiveMessages = (branchEntries: any[]): EntryWithMessage[] => {
   if (branchEntries.some((entry) => entry.type === "context_edit")) {
     // Pi owns edit ordering and compaction visibility. Keep source ids for recall
     // refs, but use projected messages for summaries, calibration and tail cuts.

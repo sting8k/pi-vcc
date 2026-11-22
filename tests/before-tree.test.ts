@@ -8,6 +8,8 @@ import * as piCore from "@earendil-works/pi-coding-agent";
 import registerExtension from "../index";
 import { assistantText, userMsg } from "./fixtures";
 
+const RECALL_NOTE_START = "Use `vcc_recall` to search";
+
 let dir: string;
 let config: string;
 let previousConfig: string | undefined;
@@ -105,4 +107,109 @@ test.skipIf(!("buildSessionProjection" in piCore))("uses edited content with the
   const result = summarize({ entriesToSummarize: session.getBranch().slice(1) })?.summary?.summary;
   expect(result).toContain("Verified the queue backoff. (#3)");
   expect(result).not.toContain("Found a retry loop");
+});
+
+/** Run the hook as Pi does for the plain "Summarize" choice, navigating from `from` to `to`. */
+function summarizeTree(session: SessionManager, from: string, to: string) {
+  let beforeTree: ((event: SessionBeforeTreeEvent, ctx: { sessionManager: SessionManager }) =>
+    { summary?: { summary: string } } | undefined) | undefined;
+  registerExtension({
+    on(name: string, handler: NonNullable<typeof beforeTree>) {
+      if (name === "session_before_tree") beforeTree = handler;
+    },
+    registerCommand() {},
+    registerTool() {},
+  } as unknown as ExtensionAPI);
+  const { entries, commonAncestorId } = collectEntriesForBranchSummary(session, from, to);
+  const result = beforeTree!({
+    type: "session_before_tree",
+    preparation: { targetId: to, oldLeafId: from, commonAncestorId, entriesToSummarize: entries, userWantsSummary: true },
+    signal: new AbortController().signal,
+  }, { sessionManager: session });
+  return result?.summary?.summary ?? "";
+}
+
+/** The header sections, above the brief transcript. Long lines wrap there, so
+ * assert on single-word markers. */
+const headerOf = (summary: string) => summary.split("\n---\n")[0];
+
+/** A branch abandoned after a compaction: two messages before its cut, two kept, two after it. */
+function compactedBranch(compactionSummary: string, details: unknown) {
+  const session = SessionManager.inMemory(dir);
+  const root = session.appendMessage(userMsg("Shared starting point."));
+  const target = session.appendMessage(assistantText("Destination branch."));
+  session.branch(root);
+  session.appendMessage(userMsg("Covered request before the cut."));
+  session.appendMessage(assistantText("Covered answer before the cut."));
+  const kept = session.appendMessage(userMsg("Kept request after the cut."));
+  session.appendMessage(assistantText("Kept answer after the cut."));
+  session.appendCompaction(compactionSummary, kept, 1000, details, true);
+  session.appendMessage(userMsg("Request after the compaction."));
+  const leaf = session.appendMessage(assistantText("Answer after the compaction."));
+  return summarizeTree(session, leaf, target);
+}
+
+test("merges a pi-vcc compaction like a compaction does, summarizing only what it does not cover", () => {
+  writeFileSync(config, JSON.stringify({ summarizeBranches: true }));
+  const previous = [
+    "[Files And Changes]",
+    "- Modified: src/old.ts",
+    "",
+    "---",
+    "",
+    "[user]",
+    "Covered request before the cut.",
+    "",
+    "---",
+    "",
+    "Use `vcc_recall` to search for prior work, decisions, and context from before this summary. Do not redo work already completed.",
+  ].join("\n");
+  const result = compactedBranch(previous, { compactor: "pi-vcc" });
+
+  expect(headerOf(result)).toContain("src/old.ts");
+  expect(result).toContain("Kept request after the cut.");
+  expect(result).toContain("Request after the compaction.");
+  expect(result).not.toContain("Covered answer before the cut.");
+  expect(result).not.toContain("compacted into the following summary");
+  expect(result.split(RECALL_NOTE_START).length - 1).toBe(1);
+});
+
+test("keeps a compaction pi-vcc did not write as context, not as a user request", () => {
+  writeFileSync(config, JSON.stringify({ summarizeBranches: true }));
+  const result = compactedBranch("## Goal\nFOREIGN-SUMMARY-MARKER", undefined);
+
+  expect(result).toContain("compacted into the following summary");
+  expect(result).toContain("FOREIGN-SUMMARY-MARKER");
+  expect(headerOf(result)).not.toContain("FOREIGN-SUMMARY-MARKER");
+});
+
+test("does not read an earlier branch summary as a user request", () => {
+  writeFileSync(config, JSON.stringify({ summarizeBranches: true }));
+  const session = SessionManager.inMemory(dir);
+  const root = session.appendMessage(userMsg("Shared starting point."));
+  const target = session.appendMessage(assistantText("Destination branch."));
+  session.branchWithSummary(root, "EARLIER-BRANCH-MARKER", undefined, true);
+  session.appendMessage(userMsg("Investigate the queue worker."));
+  const leaf = session.appendMessage(assistantText("Found a retry loop."));
+
+  const result = summarizeTree(session, leaf, target);
+  expect(result).toContain("EARLIER-BRANCH-MARKER");
+  expect(headerOf(result)).not.toContain("EARLIER-BRANCH-MARKER");
+  expect(headerOf(result)).toContain("Investigate the queue worker.");
+});
+
+test("leaves out custom messages listed in skipCustomTypes", () => {
+  writeFileSync(config, JSON.stringify({ summarizeBranches: true, skipCustomTypes: ["noise"] }));
+  const session = SessionManager.inMemory(dir);
+  const root = session.appendMessage(userMsg("Shared starting point."));
+  const target = session.appendMessage(assistantText("Destination branch."));
+  session.branch(root);
+  session.appendMessage(userMsg("Investigate the queue worker."));
+  session.appendCustomMessageEntry("noise", "Regenerated noise text.", false);
+  session.appendCustomMessageEntry("note", "Teammate note text.", true);
+  const leaf = session.appendMessage(assistantText("Found a retry loop."));
+
+  const result = summarizeTree(session, leaf, target);
+  expect(result).toContain("Teammate note text.");
+  expect(result).not.toContain("Regenerated noise text.");
 });

@@ -1,6 +1,7 @@
 import type { ExtensionAPI, SessionEntry, SessionMessageEntry } from "@earendil-works/pi-coding-agent";
 import * as piCore from "@earendil-works/pi-coding-agent";
 import { getSessionGlobalIndexById } from "../core/global-indices";
+import { collectLiveMessages } from "./before-compact";
 import { loadSettings } from "../core/settings";
 import { isSkippedCustom, toLiveMessage, toSummaryMessage } from "../core/summary-messages";
 import { compileRanked } from "../core/summarize";
@@ -19,8 +20,25 @@ export const registerBeforeTreeHook = (pi: ExtensionAPI) => {
     if (settings.summarizeBranches !== true) return;
     if (signal.aborted) return { cancel: true };
 
+    // A compaction pi-vcc wrote is merged as the compaction hook merges it: its
+    // sections are the previous summary, and only the messages it does not cover
+    // (from its firstKeptEntryId) are summarized again. Any other compaction
+    // summary stays in the input below as context.
+    let previousSummary: string | undefined;
+    for (let i = entriesToSummarize.length - 1; i >= 0; i--) {
+      const entry = entriesToSummarize[i];
+      if (entry.type !== "compaction") continue;
+      if ((entry.details as { compactor?: unknown } | undefined)?.compactor === "pi-vcc") previousSummary = entry.summary;
+      break;
+    }
+
     let entries: ProjectedEntry[];
-    if (entriesToSummarize.some(({ type }: { type: string }) => type === "context_edit")) {
+    if (previousSummary !== undefined) {
+      entries = collectLiveMessages(entriesToSummarize).map(({ entry, message }) => ({
+        sourceEntry: entry as SessionEntry,
+        messages: [message as SessionMessageEntry["message"]],
+      }));
+    } else if (entriesToSummarize.some(({ type }: { type: string }) => type === "context_edit")) {
       // Newer Pi hosts can omit or replace entries. Use their projection to
       // keep those edits and retain the source IDs for recall.
       const project = (piCore as typeof piCore & {
@@ -56,6 +74,7 @@ export const registerBeforeTreeHook = (pi: ExtensionAPI) => {
     const summary = compileRanked({
       messages,
       sourceIndices,
+      previousSummary,
       trackCommands: settings.trackCommands,
       ranking: { maxBriefChars: 1100 * DEFAULT_CHARS_PER_TOKEN },
     });
