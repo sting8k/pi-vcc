@@ -63,10 +63,7 @@ export const registerBeforeTreeHook = (pi: ExtensionAPI) => {
         if (isSkippedCustom(message, settings.skipCustomTypes)) continue;
         const converted = toSummaryMessage(message);
         if (!converted) continue;
-        // Prior summaries provide context without becoming new user requests.
-        messages.push(message.role === "branchSummary" || message.role === "compactionSummary"
-          ? { ...converted, injected: true }
-          : converted);
+        messages.push(converted);
         sourceIndices.push(indexById?.get(sourceEntry.id));
       }
     }

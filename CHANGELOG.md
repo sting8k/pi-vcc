@@ -12,6 +12,10 @@ All notable changes to `@sting8k/pi-vcc` are documented in this file.
 
 - **`[Early Session Requests]` removed** — the first user messages were kept for the whole session, so later in a long session they described work that was long done (or were a warm-up line like "explore this repo"). The first messages are now ordinary `[User Messages]` items: they show while the session is young and roll out after 15 newer messages. `vcc_recall` still finds them. An older summary's `[Session Goal]` or `[Early Session Requests]` is dropped on merge.
 
+### Fixes
+
+- **A branch summary is no longer read as a user message** — after `/tree` with a summary, the next compaction listed the branch summary as an item of `[User Messages]`. It now stays in the transcript as context only.
+
 ## [0.11.2]
 
 ### Fixes

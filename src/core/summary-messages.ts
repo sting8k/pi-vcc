@@ -47,7 +47,10 @@ export const toSummaryMessage = (message: any) => {
   if (!converted) return undefined;
   // Keep ! commands in their original form for the brief transcript.
   if (message.role === "bashExecution") return message;
-  // Extension messages should not be counted as user requests.
-  if (message.role === "custom") return { ...converted, injected: true };
+  // Extension messages and earlier summaries become user-role messages, but
+  // the user did not write them: they must not be counted as user requests.
+  if (message.role === "custom" || message.role === "branchSummary" || message.role === "compactionSummary") {
+    return { ...converted, injected: true };
+  }
   return converted;
 };
