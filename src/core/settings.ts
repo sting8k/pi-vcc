@@ -75,7 +75,7 @@ export interface PiVccSettings {
 
 export const DEFAULT_SETTINGS: PiVccSettings = {
   overrideDefaultCompaction: true,
-  summarizeBranches: false,
+  summarizeBranches: true,
   smartKeepTail: true,
   continueAfterThresholdCompact: true,
   debug: false,

@@ -67,8 +67,13 @@ function setupTree() {
   };
 }
 
-test("existing configs leave branch summaries to Pi by default", () => {
-  writeFileSync(config, JSON.stringify({ overrideDefaultCompaction: true }));
+test("summarizes by default, also for an existing config without the key", () => {
+  writeFileSync(config, JSON.stringify({ overrideDefaultCompaction: false }));
+  expect(setupTree().summarize()?.summary?.summary).toContain("Investigate the queue worker.");
+});
+
+test("summarizeBranches false leaves branch summaries to Pi", () => {
+  writeFileSync(config, JSON.stringify({ summarizeBranches: false }));
   expect(setupTree().summarize()).toBeUndefined();
 });
 
