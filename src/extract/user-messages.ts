@@ -4,8 +4,6 @@ import { SKILL_BLOCK_RE } from "../core/skill-collapse";
 
 /** Each user message becomes one item, clipped to this many characters. */
 const USER_MESSAGE_CHARS = 300;
-/** [Early Session Requests] keeps this many of the first messages. */
-export const EARLY_REQUESTS_KEPT = 3;
 /** [User Messages] keeps this many of the newest messages. */
 const USER_MESSAGES_KEPT = 15;
 

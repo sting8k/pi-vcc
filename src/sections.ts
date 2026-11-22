@@ -1,5 +1,4 @@
 export interface SectionData {
-  earlyRequests: string[];
   filesAndChanges: string[];
   commits: string[];
   userMessages: string[];

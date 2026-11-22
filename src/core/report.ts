@@ -7,7 +7,7 @@ import { searchEntries } from "./search-entries";
 import { type CompileInput, briefOf, compile, sectionOf } from "./summarize";
 import { estimateTokensFromChars } from "./token-estimate";
 
-const SECTION_HEADERS = ["Early Session Requests", "Files And Changes", "Commits", "User Messages"];
+const SECTION_HEADERS = ["Files And Changes", "Commits", "User Messages"];
 
 interface RoleCounts {
   user: number;
@@ -46,7 +46,6 @@ export interface CompactReport {
     estimatedTokens: number;
     sectionCount: number;
     summaryPreview: string;
-    earlyRequestsCount: number;
     briefTranscriptLines: number;
   };
   compression: {
@@ -167,7 +166,7 @@ const probesOf = (messages: Message[], summary: string): RecallProbe[] => {
   }
 
   const rawProbes = [
-    { label: "request", text: data.earlyRequests[0] ?? "" },
+    { label: "request", text: data.userMessages[0] ?? "" },
     { label: "file", text: firstFile },
   ];
 
@@ -211,7 +210,6 @@ export const buildCompactReport = (input: CompileInput): CompactReport => {
       estimatedTokens: estimateTokensFromChars(summary.length),
       sectionCount: sectionCountOf(summary),
       summaryPreview: summary,
-      earlyRequestsCount: data.earlyRequests.length,
       briefTranscriptLines: briefLineCountOf(summary),
     },
     compression: {

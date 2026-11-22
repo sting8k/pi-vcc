@@ -10,8 +10,7 @@ export interface FileOps {
 
 export type NormalizedBlock =
   // `injected`: the text came from an extension custom_message, not from the
-  // user. It renders in the brief but is not read into [Early Session Requests]
-  // or [User Messages].
+  // user. It renders in the brief but is not read into [User Messages].
   | { kind: "user"; text: string; sourceIndex?: number; injected?: boolean }
   | { kind: "assistant"; text: string; sourceIndex?: number }
   | { kind: "tool_call"; name: string; args: Record<string, unknown>; sourceIndex?: number }

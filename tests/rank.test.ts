@@ -157,7 +157,7 @@ describe("section-aware brief ranking prototype", () => {
     });
 
     expect(ranked.length).toBeLessThan(baseline.length);
-    expect(ranked).toContain("[Early Session Requests]");
+    expect(ranked).toContain("[User Messages]");
     expect(ranked).toContain("Fix auth bug");
     expect(ranked).toContain('* Edit "src/auth.ts"');
     expect(ranked).toContain('* bash "bun test tests/auth.test.ts"');

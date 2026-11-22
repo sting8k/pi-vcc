@@ -3,7 +3,7 @@ import type { FileOps } from "../types";
 import { normalize } from "./normalize";
 import { filterNoise } from "./filter-noise";
 import { buildSections } from "./build-sections";
-import { EARLY_REQUESTS_KEPT, keepNewestUserMessages } from "../extract/user-messages";
+import { keepNewestUserMessages } from "../extract/user-messages";
 import { formatSummary, capBrief, capItems, stripCapMarker, BRIEF_MAX_LINES, FILES_PER_CATEGORY, RECALL_NOTE, wrapLongLines } from "./format";
 import { COMMAND_SEPARATOR, COMMANDS_PER_NAME } from "../extract/tracked-commands";
 import { selectRankedBriefBlocks, type BriefRankingOptions } from "./rank";
@@ -28,8 +28,9 @@ export interface RankedCompileInput extends CompileInput {
   ranking?: BriefRankingOptions;
 }
 
-const EARLY = "Early Session Requests";
-const HEADER_NAMES = [EARLY, "Files And Changes", "Commits", "Tracked Commands", "User Messages"];
+// A section missing here is dropped on merge, e.g. [Session Goal] or
+// [Early Session Requests] from an older version.
+const HEADER_NAMES = ["Files And Changes", "Commits", "Tracked Commands", "User Messages"];
 
 const SEPARATOR = "\n\n---\n\n";
 
@@ -68,18 +69,6 @@ const isClean = (l: string) => l.startsWith("- ") && !l.includes("<skill") && !l
 // rejoin each item's indented continuation lines so the merges, which read
 // only "- " lines, see whole items.
 const unwrapSection = (text: string, header: string) => sectionOf(text, header).replace(/\n[ \t]+(?=\S)/g, " ");
-
-/**
- * The previous summary's early requests, kept as they are: the first summary
- * sets them. An older version's [Session Goal] gives its first real line
- * (not a "- [skill: x]" / "- [Scope change]" marker).
- */
-const pinnedEarlyRequests = (prev: string): string[] => {
-  const early = unwrapSection(prev, EARLY).split("\n").filter(isClean);
-  if (early.length > 0) return early.slice(0, EARLY_REQUESTS_KEPT);
-  const goal = unwrapSection(prev, "Session Goal").split("\n").find((l) => isClean(l) && !/^- \[[^\]]*\]$/.test(l));
-  return goal ? [goal] : [];
-};
 
 const COMMITS_CAP = 8;
 const COMMIT_HASH_RE = /^- [0-9a-f]{7,12}: /;
@@ -255,10 +244,8 @@ const mergeBriefTranscriptWithFreshBudget = (prev: string, fresh: string): strin
 
 const mergePrevious = (prev: string, fresh: string, options: { preserveFreshBrief?: boolean } = {}): string => {
   // Merge header sections
-  const early = pinnedEarlyRequests(prev);
   const headers = HEADER_NAMES
     .map((header) => {
-      if (header === EARLY && early.length > 0) return `[${EARLY}]\n${early.join("\n")}`;
       return mergeHeaderSection(header, unwrapSection(prev, header), unwrapSection(fresh, header));
     })
     .filter(Boolean);
@@ -295,8 +282,7 @@ const compileWithBriefBlocks = (input: CompileInput, options: CompileWithBriefBl
   const prev = input.previousSummary
     ? stripRecallNote(input.previousSummary)
     : undefined;
-  const hasEarlyRequests = prev !== undefined && pinnedEarlyRequests(prev).length > 0;
-  const data = buildSections({ blocks, briefBlocks, fileOps: input.fileOps, trackCommands: input.trackCommands, hasEarlyRequests });
+  const data = buildSections({ blocks, briefBlocks, fileOps: input.fileOps, trackCommands: input.trackCommands });
   const fresh = formatSummary(data, { capBriefTranscript: options.capFreshBrief ?? true });
   const merged = prev ? mergePrevious(prev, fresh, { preserveFreshBrief: options.preserveFreshBriefOnMerge }) : fresh;
   if (!merged) return "";
