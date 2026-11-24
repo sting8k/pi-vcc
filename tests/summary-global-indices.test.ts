@@ -156,6 +156,19 @@ describe("compile with sourceIndices", () => {
     expect(summary).toContain('* edit "beta.txt" (#4)');
     expect(summary).not.toContain('* edit "beta.txt" (#1)');
   });
+
+  test("emits the global ref for user text, also when the text was cleaned (#69)", () => {
+    const summary = compile({
+      messages: [
+        userMsg("Fix the login bug"),
+        assistantWithToolCall("edit", { file_path: "auth.ts" }),
+        userMsg("<system-reminder>noise</system-reminder>\nSwitch to the signup page"),
+      ],
+      sourceIndices: [10, 11, 12],
+    });
+    expect(summary).toContain("[user]\nFix the login bug (#10)");
+    expect(summary).toContain("[user]\nSwitch to the signup page (#12)");
+  });
 });
 
 // ── hook boundary: second compaction + branching ────────────────────────
