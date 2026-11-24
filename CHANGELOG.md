@@ -4,6 +4,8 @@ All notable changes to `@sting8k/pi-vcc` are documented in this file.
 
 ## [Unreleased]
 
+## [0.12.1]
+
 ### Fixes
 
 - **User messages in the transcript have their `(#N)` ref** — the noise filter rebuilt each user block with only its text, so the ref was lost and `[user]` lines never had one, while assistant lines and tool calls did. The agent can now go straight to what the user wrote with `vcc_recall`. (#69)
