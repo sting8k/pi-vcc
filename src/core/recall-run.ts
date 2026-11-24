@@ -126,17 +126,18 @@ export const ignoredNote = (request: RecallRequest): string =>
     ? `Ignored: ${request.ignored.join(", ")} (${IGNORED_REASON[request.action.kind]}).\n\n`
     : "");
 
-/** Ceiling for one recall result, the 50 KB of Pi's read tool: one long entry
- *  (a base64 image on one line) must not flood the context. */
-export const RECALL_OUTPUT_CHARS = 50 * 1024;
+/** Ceiling for one recall result in UTF-8 bytes, as Pi's read tool counts its
+ *  50 KB: one long entry (a base64 image on one line) must not flood the context. */
+export const RECALL_OUTPUT_BYTES = 50 * 1024;
 
 const capOutput = (text: string): string => {
-  if (text.length <= RECALL_OUTPUT_CHARS) return text;
-  // Never split a surrogate pair.
-  const end = /[\uD800-\uDBFF]/.test(text[RECALL_OUTPUT_CHARS - 1]) ? RECALL_OUTPUT_CHARS - 1 : RECALL_OUTPUT_CHARS;
-  return `Warning: output clipped at ${end} of ${text.length} chars (one recall result is capped at 50 KB). ` +
+  const bytes = Buffer.byteLength(text, "utf8");
+  if (bytes <= RECALL_OUTPUT_BYTES) return text;
+  // encodeInto stops before a character that does not fit, so none is split.
+  const { read, written } = new TextEncoder().encodeInto(text, new Uint8Array(RECALL_OUTPUT_BYTES));
+  return `Warning: output clipped at ${written} of ${bytes} bytes (one recall result is capped at 50 KB). ` +
     `Ask for less at once: fewer expand indices, a narrower query, or a line range for file content ('#N:path:offset:limit').\n\n` +
-    `${text.slice(0, end)}\n...[clipped at 50 KB]`;
+    `${text.slice(0, read)}\n...[clipped at 50 KB]`;
 };
 
 export const runRecall = (request: RecallRequest, view: RecallView, hints: RecallPagingHints): string =>
