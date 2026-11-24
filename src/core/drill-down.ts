@@ -95,19 +95,9 @@ function formatToolCallContent(
   const allLines = body.split("\n");
   const totalLines = allLines.length;
   const previewLimit = 30;
-  const MAX_FULL_BYTES = 50 * 1024;
 
   if (full) {
-    // Full content: capped at 50KB
-    if (Buffer.byteLength(body, "utf8") > MAX_FULL_BYTES) {
-      const truncated = body.slice(0, MAX_FULL_BYTES);
-      return `File: ${tc.path}
-Tool: ${tc.name}
-
-${truncated}
-
-... (${Buffer.byteLength(body, "utf8") - MAX_FULL_BYTES} more bytes — file exceeds 50KB display limit. Use #${entryIndex}:${tc.path}:${previewLimit} for next page.)`;
-    }
+    // The 50 KB cap on every recall result (runRecall) applies here too.
     return `File: ${tc.path}
 Tool: ${tc.name}
 

@@ -4,6 +4,11 @@ All notable changes to `@sting8k/pi-vcc` are documented in this file.
 
 ## [Unreleased]
 
+### Fixes
+
+- **User messages in the transcript have their `(#N)` ref** — the noise filter rebuilt each user block with only its text, so the ref was lost and `[user]` lines never had one, while assistant lines and tool calls did. The agent can now go straight to what the user wrote with `vcc_recall`. (#69)
+- **The 50 KB cap on a `vcc_recall` result counts bytes** — it counted string length, so text in Chinese, Japanese or Korean (3 bytes a character) came back at up to 150 KB. It now counts UTF-8 bytes, as Pi's read tool does, and never cuts a character in half. The warning on a clipped result gives bytes. A `#N:path:full` file read had a separate 50 KB check that reported wrong sizes; that check is gone and the same cap applies. (#68)
+
 ## [0.12.0]
 
 ### Features

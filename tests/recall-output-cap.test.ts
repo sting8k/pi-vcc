@@ -4,7 +4,7 @@ import { createHash } from "crypto";
 import { tmpdir } from "os";
 import { join } from "path";
 import { registerRecallTool } from "../src/tools/recall";
-import { RECALL_OUTPUT_CHARS } from "../src/core/recall-run";
+import { RECALL_OUTPUT_BYTES } from "../src/core/recall-run";
 import { searchEntries } from "../src/core/search-entries";
 
 // One tool result is a ~600 KB base64 image on a single line (issue #63).
@@ -15,6 +15,13 @@ let file: string;
 const ids: string[] = [];
 let blobIndex = -1;
 let longLineIndex = -1;
+// Multi-byte text (#68): the cap counts UTF-8 bytes, not string length.
+const cjk = "中".repeat(50 * 1024); // 51,200 chars, 153,600 bytes
+const emoji = `a${"😀".repeat(20_000)}`; // a cut at 50 KB lands inside an emoji
+const cjkFile = "中文內容一行\n".repeat(20_000);
+let cjkIndex = -1;
+let emojiIndex = -1;
+let cjkFileIndex = -1;
 // A long single line that is not base64 (minified code, a JSON event): search keeps it.
 const longLine = `${"a1,".repeat(100_000)}needle_mark${"b2,".repeat(100_000)}`;
 
@@ -37,6 +44,15 @@ beforeAll(() => {
     if (i === 40) {
       longLineIndex = ids.length;
       add({ role: "user", content: longLine });
+      continue;
+    }
+    if (i === 50) {
+      cjkIndex = ids.length;
+      add({ role: "user", content: cjk });
+      emojiIndex = ids.length;
+      add({ role: "user", content: emoji });
+      cjkFileIndex = ids.length;
+      add({ role: "assistant", content: [{ type: "toolCall", id: "w1", name: "write", arguments: { path: "notes/cjk.txt", content: cjkFile } }] });
       continue;
     }
     add({ role: "user", content: i % 10 === 0 ? `Step ${i}: set max retries to 3` : `Step ${i}: run the tests` });
@@ -75,9 +91,35 @@ describe("vcc_recall output size (issue #63)", () => {
 
   it("clips an expand over the cap and says so first", async () => {
     const out = await recall({ expand: [blobIndex] });
-    expect(out.startsWith(`Warning: output clipped at ${RECALL_OUTPUT_CHARS} of `)).toBe(true);
-    expect(out.length).toBeLessThan(RECALL_OUTPUT_CHARS + 500);
+    expect(out.startsWith(`Warning: output clipped at ${RECALL_OUTPUT_BYTES} of `)).toBe(true);
+    expect(Buffer.byteLength(out)).toBeLessThan(RECALL_OUTPUT_BYTES + 500);
     expect(out.endsWith("...[clipped at 50 KB]")).toBe(true);
+  });
+
+  // The kept part of a clipped result: between the warning and the footer.
+  const keptOf = (out: string) => out.slice(out.indexOf("\n\n") + 2, out.lastIndexOf("\n...[clipped at 50 KB]"));
+
+  it("counts the cap in UTF-8 bytes for multi-byte text (#68)", async () => {
+    const out = await recall({ expand: [cjkIndex] });
+    expect(out).toMatch(/^Warning: output clipped at \d+ of \d+ bytes/);
+    expect(Buffer.byteLength(keptOf(out))).toBeLessThanOrEqual(RECALL_OUTPUT_BYTES);
+    expect(Buffer.byteLength(out)).toBeLessThan(RECALL_OUTPUT_BYTES + 500);
+  });
+
+  it("never splits a character at the cut", async () => {
+    for (const index of [cjkIndex, emojiIndex]) {
+      const kept = keptOf(await recall({ expand: [index] }));
+      expect(kept).not.toContain("\uFFFD");
+      expect(Buffer.from(kept, "utf8").toString("utf8")).toBe(kept);
+      expect(Buffer.byteLength(kept)).toBeGreaterThan(RECALL_OUTPUT_BYTES - 4);
+    }
+  });
+
+  it("caps a full file read the same way", async () => {
+    const out = await recall({ query: `#${cjkFileIndex}:cjk.txt:full` });
+    expect(out).toMatch(/^Warning: output clipped at \d+ of \d+ bytes/);
+    expect(out).toContain("File: notes/cjk.txt");
+    expect(Buffer.byteLength(out)).toBeLessThan(RECALL_OUTPUT_BYTES + 500);
   });
 });
 
