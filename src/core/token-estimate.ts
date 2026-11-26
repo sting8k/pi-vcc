@@ -98,3 +98,77 @@ export const estimateMessageContentTokens = (
   content: unknown,
   charsPerToken = DEFAULT_CHARS_PER_TOKEN,
 ): number => estimateTokensFromChars(estimateMessageContentChars(content), charsPerToken);
+
+/**
+ * Char length of a full context message, including text a non-`content` role
+ * carries. pi-core's own estimateTokens walks these shapes, so estimating over
+ * a session projection needs them to stay on the same scale:
+ *  - system            → content + prompt sections + added tool schemas
+ *  - compactionSummary → the injected previous summary
+ *  - branchSummary     → the branch summary text
+ *  - bashExecution     → command + output
+ *  - everything else   → estimateMessageContentChars(content)
+ */
+export const estimateMessageChars = (message: unknown): number => {
+  if (!message || typeof message !== "object") return 0;
+  const m = message as Record<string, any>;
+
+  if (m.role === "system") {
+    let chars = typeof m.content === "string" ? m.content.length : estimateMessageContentChars(m.content);
+    if (m.sections && typeof m.sections === "object") {
+      for (const value of Object.values(m.sections)) {
+        if (typeof value === "string") chars += value.length;
+      }
+    }
+    if (m.toolsAdded !== undefined) chars += safeJsonStringify(m.toolsAdded).length;
+    return chars;
+  }
+
+  if (m.role === "compactionSummary" || m.role === "branchSummary") {
+    return typeof m.summary === "string" ? m.summary.length : 0;
+  }
+
+  if (m.role === "bashExecution") {
+    return (typeof m.command === "string" ? m.command.length : 0)
+      + (typeof m.output === "string" ? m.output.length : 0);
+  }
+
+  return estimateMessageContentChars(m.content);
+};
+
+const projectedTokens = (messages: readonly unknown[]): number =>
+  messages.reduce<number>((sum, m) => sum + estimateTokensFromChars(estimateMessageChars(m)), 0);
+
+/**
+ * Estimated token size of the context **after** a compaction.
+ *
+ * No runtime can know the next provider measurement, so pi's chars/token
+ * heuristic is applied to the projection with the summarized messages swapped
+ * for the new summary, then rescaled by the ratio between the provider-measured
+ * pre-compaction size (`tokensBefore`) and pi's estimate of that same
+ * projection. The rescale is what makes the figure comparable to the context
+ * numbers the user already sees, rather than a raw heuristic.
+ *
+ * Returns undefined when there is nothing to calibrate against, so callers omit
+ * the figure instead of printing a misleading one.
+ */
+export const estimatePostCompactionTokens = (args: {
+  /** Full context projection before the compaction. */
+  projection: readonly unknown[];
+  /** Messages this compaction replaces with the summary. */
+  removed: readonly unknown[];
+  summaryChars: number;
+  tokensBefore: number | undefined;
+}): number | undefined => {
+  const { projection, removed, summaryChars, tokensBefore } = args;
+  if (!tokensBefore || tokensBefore <= 0 || projection.length === 0) return undefined;
+
+  const preEstimate = projectedTokens(projection);
+  if (preEstimate <= 0) return undefined;
+
+  const scale = tokensBefore / preEstimate;
+  const afterEstimate = preEstimate - projectedTokens(removed) + estimateTokensFromChars(summaryChars);
+  if (!Number.isFinite(scale) || afterEstimate < 0) return undefined;
+
+  return Math.max(0, Math.round(scale * afterEstimate));
+};
